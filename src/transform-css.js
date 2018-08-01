@@ -301,22 +301,27 @@ function fixNestedCalc(rules) {
  * @param {array} rules
  */
 function fixHslCalc(rules) {
-    var reHslExp = /hsla?\(/;
-    var reCalcExp = /(-[a-z]+-)?calc\(/;
-    rules.forEach(function(rule) {
+    const reHslExp = /hsla?\(/;
+    const reCalcExp = /(-[a-z]+-)?calc\(/;
+
+    rules.forEach(rule => {
         if (rule.declarations) {
-            rule.declarations.forEach(function(decl) {
-                var oldValue = decl.value;
-                var newValue = "";
+            rule.declarations.forEach(decl => {
+                let oldValue = decl.value;
+                let newValue = '';
+
                 while (reHslExp.test(oldValue)) {
-                    var rootCalc = balancedMatch("(", ")", oldValue || "");
+                    const rootCalc = balanced('(', ')', oldValue || '');
+
                     oldValue = oldValue.slice(rootCalc.end);
+
                     while (reCalcExp.test(rootCalc.body)) {
-                        var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
-                        rootCalc.body = nestedCalc.pre + resolveExpression(nestedCalc.body) + nestedCalc.post;
+                        const nestedCalc = balanced(reCalcExp, ')', rootCalc.body);
+
+                        rootCalc.body = `${nestedCalc.pre}${resolveExpression(nestedCalc.body)}${nestedCalc.post}`;
                     }
-                    newValue += rootCalc.pre + "(" + rootCalc.body;
-                    newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
+                    newValue += `${rootCalc.pre}(${rootCalc.body}`;
+                    newValue += !reHslExp.test(oldValue) ? `)${rootCalc.post}` : '';
                 }
                 decl.value = newValue || decl.value;
             });
@@ -331,24 +336,24 @@ function fixHslCalc(rules) {
  * @param {string} expr
  */
 function resolveExpression(expr) {
-    var parts = expr.split(/(\+|\-)/);
-    var sum = (parts[0] || "").match(/^\s*(\d+)%\s*$/);
+    const parts = expr.split(/(\+|-)/);
+    let sum = (parts[0] || '').match(/^\s*(\d+)%\s*$/);
     if (!sum) {
         return expr;
     }
 
     sum = parseInt(sum[1]);
-    for (var i = 1; i < parts.length - 1; i+=2) {
-        var num = parts[i + 1].match(/^\s*(\d+)%\s*$/);
-        if (num && parts[i] === "+") {
+    for (let i = 1; i < parts.length - 1; i+=2) {
+        const num = parts[i + 1].match(/^\s*(\d+)%\s*$/);
+        if (num && parts[i] === '+') {
             sum += parseInt(num[1]);
-        } else if (num && parts[i] === "-") {
+        } else if (num && parts[i] === '-') {
             sum -= parseInt(num[1]);
         } else {
             return expr;
         }
     }
-    return sum + "%";
+    return sum + '%';
 }
 
 /**
