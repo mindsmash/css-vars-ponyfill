@@ -142,7 +142,5 @@ const umdMinified = merge({}, config, {
 // =============================================================================
 export default [
     esm,
-    esmMinified,
-    umd,
-    umdMinified
+    esmMinified
 ];
