@@ -336,19 +336,21 @@ function fixHslCalc(rules) {
  * @param {string} expr
  */
 function resolveExpression(expr) {
+    const regex = /^\s*(\d+(?:\.\d+)?)%\s*$/;
+
     const parts = expr.split(/(\+|-)/);
-    let sum = (parts[0] || '').match(/^\s*(\d+)%\s*$/);
+    let sum = (parts[0] || '').match(regex);
     if (!sum) {
         return expr;
     }
 
-    sum = parseInt(sum[1]);
+    sum = parseFloat(sum[1]);
     for (let i = 1; i < parts.length - 1; i+=2) {
-        const num = parts[i + 1].match(/^\s*(\d+)%\s*$/);
+        const num = parts[i + 1].match(regex);
         if (num && parts[i] === '+') {
-            sum += parseInt(num[1]);
+            sum += parseFloat(num[1]);
         } else if (num && parts[i] === '-') {
-            sum -= parseInt(num[1]);
+            sum -= parseFloat(num[1]);
         } else {
             return expr;
         }

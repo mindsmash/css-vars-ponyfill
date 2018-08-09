@@ -884,18 +884,19 @@
         });
     }
     function resolveExpression(expr) {
+        var regex = /^\s*(\d+(?:\.\d+)?)%\s*$/;
         var parts = expr.split(/(\+|-)/);
-        var sum = (parts[0] || "").match(/^\s*(\d+)%\s*$/);
+        var sum = (parts[0] || "").match(regex);
         if (!sum) {
             return expr;
         }
-        sum = parseInt(sum[1]);
+        sum = parseFloat(sum[1]);
         for (var i = 1; i < parts.length - 1; i += 2) {
-            var num = parts[i + 1].match(/^\s*(\d+)%\s*$/);
+            var num = parts[i + 1].match(regex);
             if (num && parts[i] === "+") {
-                sum += parseInt(num[1]);
+                sum += parseFloat(num[1]);
             } else if (num && parts[i] === "-") {
-                sum -= parseInt(num[1]);
+                sum -= parseFloat(num[1]);
             } else {
                 return expr;
             }
