@@ -109,6 +109,17 @@ describe('transform-css', function() {
 
             expect(cssOut).to.equal(expectCss);
         });
+
+        it('transforms hsl color calc', function() {
+            const cssIn     = `
+                :root {--h: 120; --s: 50%; --l: 50.123456%}
+                p { color: hsl(var(--h), var(--s), calc(var(--l) - 12%)) }
+            `;
+            const cssOut    = transformCss(cssIn);
+            const expectCss = 'p{color:hsl(120, 50%, 38.123456%);}';
+
+            expect(cssOut).to.equal(expectCss);
+        });
     });
 
     // Tests: Options

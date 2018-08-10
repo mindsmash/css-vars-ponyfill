@@ -194,7 +194,6 @@ function transformVars(cssText, options = {}) {
     // Fix nested calc() values and HSL calc() values
     if (settings.fixNestedCalc) {
         fixNestedCalc(cssTree.stylesheet.rules);
-        fixHslCalc(cssTree.stylesheet.rules);
     }
 
     // Return CSS string
@@ -298,35 +297,24 @@ function fixNestedCalc(rules) {
  * Removes calc keywords from HSL colors for legacy browser compatibility.
  * Example: hsl(240, 45%, calc(30% + 20%)) => hsl(240, 45%, 50%)
  *
- * @param {array} rules
+ * @param {string} object
  */
-function fixHslCalc(rules) {
+function fixHslCalc(value) {
     const reHslExp = /hsla?\(/;
     const reCalcExp = /(-[a-z]+-)?calc\(/;
-
-    rules.forEach(rule => {
-        if (rule.declarations) {
-            rule.declarations.forEach(decl => {
-                let oldValue = decl.value;
-                let newValue = '';
-
-                while (reHslExp.test(oldValue)) {
-                    const rootCalc = balanced('(', ')', oldValue || '');
-
-                    oldValue = oldValue.slice(rootCalc.end);
-
-                    while (reCalcExp.test(rootCalc.body)) {
-                        const nestedCalc = balanced(reCalcExp, ')', rootCalc.body);
-
-                        rootCalc.body = `${nestedCalc.pre}${resolveExpression(nestedCalc.body)}${nestedCalc.post}`;
-                    }
-                    newValue += `${rootCalc.pre}(${rootCalc.body}`;
-                    newValue += !reHslExp.test(oldValue) ? `)${rootCalc.post}` : '';
-                }
-                decl.value = newValue || decl.value;
-            });
+    let oldValue = value;
+    let newValue = '';
+    while (reHslExp.test(oldValue)) {
+        const rootCalc = balanced('(', ')', oldValue || '');
+        oldValue = oldValue.slice(rootCalc.end);
+        while (reCalcExp.test(rootCalc.body)) {
+            const nestedCalc = balanced(reCalcExp, ')', rootCalc.body);
+            rootCalc.body = `${nestedCalc.pre}` + resolveExpression(nestedCalc.body) + nestedCalc.post;
         }
-    });
+        newValue += rootCalc.pre + '(' + rootCalc.body;
+        newValue += !reHslExp.test(oldValue) ? ')' + rootCalc.post : '';
+    }
+    return newValue || value;
 }
 
 /**
@@ -415,7 +403,7 @@ function resolveValue(value, map, settings) {
         value = resolveValue(value, map, settings);
     }
 
-    return value;
+    return fixHslCalc(value);
 }
 
 

@@ -818,7 +818,6 @@ function transformVars(cssText) {
     });
     if (settings.fixNestedCalc) {
         fixNestedCalc(cssTree.stylesheet.rules);
-        fixHslCalc(cssTree.stylesheet.rules);
     }
     return stringifyCss(cssTree);
 }
@@ -876,28 +875,22 @@ function fixNestedCalc(rules) {
     });
 }
 
-function fixHslCalc(rules) {
+function fixHslCalc(value) {
     var reHslExp = /hsla?\(/;
     var reCalcExp = /(-[a-z]+-)?calc\(/;
-    rules.forEach(function(rule) {
-        if (rule.declarations) {
-            rule.declarations.forEach(function(decl) {
-                var oldValue = decl.value;
-                var newValue = "";
-                while (reHslExp.test(oldValue)) {
-                    var rootCalc = balancedMatch("(", ")", oldValue || "");
-                    oldValue = oldValue.slice(rootCalc.end);
-                    while (reCalcExp.test(rootCalc.body)) {
-                        var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
-                        rootCalc.body = "" + nestedCalc.pre + resolveExpression(nestedCalc.body) + nestedCalc.post;
-                    }
-                    newValue += rootCalc.pre + "(" + rootCalc.body;
-                    newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
-                }
-                decl.value = newValue || decl.value;
-            });
+    var oldValue = value;
+    var newValue = "";
+    while (reHslExp.test(oldValue)) {
+        var rootCalc = balancedMatch("(", ")", oldValue || "");
+        oldValue = oldValue.slice(rootCalc.end);
+        while (reCalcExp.test(rootCalc.body)) {
+            var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
+            rootCalc.body = "" + nestedCalc.pre + resolveExpression(nestedCalc.body) + nestedCalc.post;
         }
-    });
+        newValue += rootCalc.pre + "(" + rootCalc.body;
+        newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
+    }
+    return newValue || value;
 }
 
 function resolveExpression(expr) {
@@ -950,7 +943,7 @@ function resolveValue(value, map, settings) {
     if (value.indexOf(VAR_FUNC_IDENTIFIER + "(") !== -1) {
         value = resolveValue(value, map, settings);
     }
-    return value;
+    return fixHslCalc(value);
 }
 
 var name = "css-vars-ponyfill";
