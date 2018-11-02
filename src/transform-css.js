@@ -151,7 +151,7 @@ function transformVars(cssText, options = {}) {
                 continue;
             }
 
-            resolvedValue = resolveValue(value, map, settings);
+            resolvedValue = fixHslCalc(resolveValue(value, map, settings));
 
             if (resolvedValue !== decl.value) {
                 if (!settings.preserve) {
@@ -389,12 +389,12 @@ function resolveValue(value, map, settings = {}, __recursiveFallback) {
             settings.onWarning(`${warningIntro} missing closing ")" in the value "${value}"`);
         }
 
-        return fixHslCalc(value);
+        return value;
     }
     else if (varFuncData.body.trim().length === 0) {
         settings.onWarning(`${warningIntro} var() must contain a non-whitespace string`);
 
-        return fixHslCalc(value);
+        return value;
     }
     else {
         return (

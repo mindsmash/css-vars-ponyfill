@@ -826,7 +826,7 @@ function transformVars(cssText) {
             if (!value || value.indexOf(VAR_FUNC_IDENTIFIER + "(") === -1) {
                 continue;
             }
-            resolvedValue = resolveValue(value, map, settings);
+            resolvedValue = fixHslCalc(resolveValue(value, map, settings));
             if (resolvedValue !== decl.value) {
                 if (!settings.preserve) {
                     decl.value = resolvedValue;
@@ -898,6 +898,45 @@ function fixNestedCalc(rules) {
             });
         }
     });
+}
+
+function fixHslCalc(value) {
+    var reHslExp = /hsla?\(/;
+    var reCalcExp = /(-[a-z]+-)?calc\(/;
+    var oldValue = value;
+    var newValue = "";
+    while (reHslExp.test(oldValue)) {
+        var rootCalc = balancedMatch("(", ")", oldValue || "");
+        oldValue = oldValue.slice(rootCalc.end);
+        while (reCalcExp.test(rootCalc.body)) {
+            var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
+            rootCalc.body = "".concat(nestedCalc.pre) + resolveExpression(nestedCalc.body) + nestedCalc.post;
+        }
+        newValue += rootCalc.pre + "(" + rootCalc.body;
+        newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
+    }
+    return newValue || value;
+}
+
+function resolveExpression(expr) {
+    var regex = /^\s*(\d+(?:\.\d+)?)%\s*$/;
+    var parts = expr.split(/(\+|-)/);
+    var sum = (parts[0] || "").match(regex);
+    if (!sum) {
+        return expr;
+    }
+    sum = parseFloat(sum[1]);
+    for (var i = 1; i < parts.length - 1; i += 2) {
+        var num = parts[i + 1].match(regex);
+        if (num && parts[i] === "+") {
+            sum += parseFloat(num[1]);
+        } else if (num && parts[i] === "-") {
+            sum -= parseFloat(num[1]);
+        } else {
+            return expr;
+        }
+    }
+    return sum + "%";
 }
 
 function resolveValue(value, map) {
