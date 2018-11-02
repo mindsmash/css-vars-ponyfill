@@ -1,24 +1,65 @@
 // Dependencies
 // =============================================================================
+import chai       from 'chai';
 import createElms from 'create-elms';
 import cssVars    from '../src/index';
 import { expect } from 'chai';
 
+chai.use(require('chai-colors'));
+
 
 // Constants & Variables
 // =============================================================================
-const hasNativeSupport = window.CSS && window.CSS.supports && window.CSS.supports('(--a: 0)');
+const bodyComputedStyle        = getComputedStyle(document.body);
+const hasAnimationSupport      = bodyComputedStyle.animationName || bodyComputedStyle.mozAnimationName || bodyComputedStyle.webkitAnimationName;
+const hasCustomPropertySupport = window.CSS && window.CSS.supports && window.CSS.supports('(--a: 0)');
 
 
 // Helpers
 // =============================================================================
 function createElmsWrap(elmData, sharedOptions = {}) {
+    const isHeadElm = elmData.tag && ['link', 'style'].indexOf(elmData.tag) !== -1;
+
     sharedOptions = Object.assign({}, {
         attr    : Object.assign({ 'data-test': true }, sharedOptions.attr || {}),
-        appendTo: 'head'
+        appendTo: isHeadElm ? 'head' : 'body'
     }, sharedOptions);
 
     return createElms(elmData, sharedOptions);
+}
+
+
+// Component
+// =============================================================================
+class TestComponent extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+    }
+
+    connectedCallback() {
+        this.shadowRoot.innerHTML = `
+            <style data-test-shadow>
+                .test-component {
+                    background: red;
+                    background: var(--test-component-background, red);
+                    color: white;
+                }
+            </style>
+
+            <p class="test-component">${this.getAttribute('data-text')}</p>
+        `;
+    }
+}
+
+if ('customElements' in window) {
+    window.customElements.define('test-component', TestComponent);
+
+    // createElms({ tag: 'style', text: ':root { --test-component-background: green; }', appendTo: 'head' });
+    // createElms([
+    //     { tag: 'test-component', attr: { 'data-text': 'Custom element' }},
+    //     { tag: 'p', text: 'Standard element' }
+    // ], { appendTo: 'body' });
 }
 
 
@@ -103,6 +144,31 @@ describe('css-vars', function() {
             });
         });
 
+        it('handles replacement of CSS placeholders', function() {
+            const styleCss = `
+                :root { --color: red; }
+                p { color: var(--color); }
+            `;
+            const expectCss = `p{color:red;}${'p{color:blue;}'.repeat(5)}`;
+
+            createElmsWrap([
+                { tag: 'style', text: styleCss },
+                { tag: 'style', text: 'p { color: blue; }' },
+                { tag: 'style', text: 'p { color: blue; }' },
+                { tag: 'style', text: 'p { color: blue; }' },
+                { tag: 'style', text: 'p { color: blue; }' },
+                { tag: 'style', text: 'p { color: blue; }' }
+            ]);
+
+            cssVars({
+                include   : '[data-test]',
+                onlyLegacy: false,
+                onComplete(cssText, styleNode) {
+                    expect(cssText.replace(/\s/g,'')).to.equal(expectCss);
+                }
+            });
+        });
+
         it('handles no matching elements', function() {
             cssVars({
                 include   : '[data-test]',
@@ -118,10 +184,52 @@ describe('css-vars', function() {
     // Tests: Options
     // -------------------------------------------------------------------------
     describe('Options', function() {
+        if ('customElements' in window) {
+            describe('rootElement', function() {
+                it('handles Element.shadowRoot <style> elements', function() {
+                    const customElm  = createElmsWrap({ tag: 'test-component', attr: { 'data-text': 'Custom Element' } })[0];
+                    const shadowRoot = customElm.shadowRoot;
+                    const expectCss  = '.test-component{background:red;background:green;color:white;}';
+
+                    createElmsWrap({ tag: 'style', text: ':root { --test-component-background: green; }' });
+
+                    cssVars({
+                        rootElement: shadowRoot,
+                        onlyLegacy : false,
+                        updateDOM  : false,
+                        onComplete(cssText, styleNode, variablesObject) {
+                            expect(cssText).to.equal(expectCss);
+
+                            // Prevent errors on proceeding tests
+                            delete variablesObject['--test-component-background'];
+                        }
+                    });
+                });
+
+                it('handles Element.shadowRoot using options.variables', function() {
+                    const customElm  = createElmsWrap({ tag: 'test-component', attr: { 'data-text': 'Custom Element' } })[0];
+                    const shadowRoot = customElm.shadowRoot;
+                    const expectCss  = '.test-component{background:red;background:green;color:white;}';
+
+                    cssVars({
+                        rootElement: shadowRoot,
+                        onlyLegacy : false,
+                        updateDOM  : false,
+                        variables  : {
+                            '--test-component-background': 'green'
+                        },
+                        onComplete(cssText, styleNode, variablesObject) {
+                            expect(cssText).to.equal(expectCss);
+                        }
+                    });
+                });
+            });
+        }
+
         describe('onlyLegacy', function() {
             it('true', function() {
                 const styleCss  = ':root{--color:red;}p{color:var(--color);}';
-                const expectCss = hasNativeSupport ? '' : 'p{color:red;}';
+                const expectCss = hasCustomPropertySupport ? '' : 'p{color:red;}';
 
                 createElmsWrap({ tag: 'style', text: styleCss });
 
@@ -232,6 +340,90 @@ describe('css-vars', function() {
                 });
             });
         });
+
+        if ('customElements' in window) {
+            describe('shadowDOM', function() {
+                it('true (handles Element.shadowRoot <style> elements)', function() {
+                    const styleCss  = ':root { --test-component-background: green; }';
+                    const expectCss = '.test-component{background:red;background:green;color:white;}';
+                    const testElms  = createElmsWrap([
+                        { tag: 'test-component', attr: { 'data-text': 'Custom Element 1' } },
+                        { tag: 'test-component', attr: { 'data-text': 'Custom Element 2' } }
+                    ]);
+
+                    let onCompleteCount = 0;
+
+                    createElmsWrap({ tag: 'style', text: styleCss });
+
+                    cssVars({
+                        include   : '[data-test],[data-test-shadow]',
+                        onlyLegacy: false,
+                        shadowDOM : true,
+                        onComplete(cssText, styleNode, variablesObject) {
+                            onCompleteCount++;
+
+                            // Test for cssText since test <style> elm with only
+                            // :root rule will also trigger callback
+                            if (cssText) {
+                                expect(cssText).to.equal(expectCss);
+                            }
+                        }
+                    });
+
+                    expect(onCompleteCount).to.equal(testElms.length + 1); // +1 = document
+                });
+
+                it('true (handles nested Element.shadowRoot <style> elements)', function() {
+                    const styleCss  = ':root { --test-component-background: green; }';
+                    const expectCss = '.test-component{background:red;background:green;color:white;}';
+                    const testElm1  = createElmsWrap({ tag: 'test-component', attr: { 'data-text': 'Custom Element 1' } })[0];
+
+                    let onCompleteCount = 0;
+
+                    createElmsWrap([
+                        { tag: 'style', text: styleCss },
+                        { tag: 'test-component', attr: { 'data-text': 'Custom Element 2' }, appendTo: testElm1 }
+                    ]);
+
+                    cssVars({
+                        rootElement: testElm1,
+                        include   : '[data-test],[data-test-shadow]',
+                        onlyLegacy: false,
+                        shadowDOM : true,
+                        onComplete(cssText, styleNode, variablesObject) {
+                            if (cssText) {
+                                onCompleteCount++;
+                                expect(cssText).to.equal(expectCss);
+                            }
+                        }
+                    });
+
+                    expect(onCompleteCount).to.equal(2);
+                });
+
+                it('false (ignores nested Element.shadowRoot <style> elements)', function() {
+                    const styleCss  = ':root { --test-component-background: green; }';
+                    const expectCss = '.test-component{background:red;background:green;color:white;}';
+                    const testElm1  = createElmsWrap({ tag: 'test-component', attr: { 'data-text': 'Custom Element 1' } })[0];
+                    const testElm2  = createElmsWrap({ tag: 'test-component', attr: { 'data-text': 'Custom Element 2' }, appendTo: testElm1 })[0];
+
+                    createElmsWrap({ tag: 'style', text: styleCss });
+
+                    cssVars({
+                        rootElement: testElm1.shadowRoot,
+                        include   : '[data-test],[data-test-shadow]',
+                        onlyLegacy: false,
+                        shadowDOM : false,
+                        onComplete(cssText, styleNode, variablesObject) {
+                            expect(styleNode.parentNode).to.equal(this.rootElement);
+                            expect(cssText).to.equal(expectCss);
+                        }
+                    });
+
+                    expect(testElm2.shadowRoot.querySelector('style[id]')).to.equal(null);
+                });
+            });
+        }
 
         describe('updateDOM', function() {
             it('true (appends <style> after last processed element in <head>)', function() {
@@ -397,7 +589,7 @@ describe('css-vars', function() {
                 });
             });
 
-            if (hasNativeSupport) {
+            if (hasCustomPropertySupport) {
                 it('updates values via native setProperty() method', function() {
                     const testElms = createElmsWrap([
                         '<p style="color: var(--color1);"></p>',
@@ -413,9 +605,9 @@ describe('css-vars', function() {
                         }
                     });
 
-                    expect(window.getComputedStyle(testElms[0]).color.replace(/\s/g,'')).to.equal('rgb(255,0,0)');
-                    expect(window.getComputedStyle(testElms[1]).color.replace(/\s/g,'')).to.equal('rgb(0,128,0)');
-                    expect(window.getComputedStyle(testElms[2]).color.replace(/\s/g,'')).to.equal('rgb(0,0,255)');
+                    expect(getComputedStyle(testElms[0]).color).to.be.colored('red');
+                    expect(getComputedStyle(testElms[1]).color).to.be.colored('green');
+                    expect(getComputedStyle(testElms[2]).color).to.be.colored('blue');
                 });
             }
         });
@@ -427,14 +619,14 @@ describe('css-vars', function() {
 
                     cssVars({
                         include   : '[data-test]',
-                        onlyLegacy: true,
+                        onlyLegacy: false,
                         watch     : true
                     });
 
                     createElmsWrap({ tag: 'style', text: styleCss });
 
                     setTimeout(function() {
-                        expect(window.getComputedStyle(document.body).color).to.equal('rgb(255, 0, 0)');
+                        expect(getComputedStyle(document.body).color).to.be.colored('red');
                         done();
                     }, 100);
                 });
@@ -716,5 +908,57 @@ describe('css-vars', function() {
                 }
             });
         });
+
+        // @keyframe support required
+        if (hasAnimationSupport) {
+            it('Fixes @keyframe bug in legacy (IE) and modern (Safari) browsers', function() {
+                const testElm = createElmsWrap({
+                    tag: 'p', text: 'Test Element', appendTo: 'body', attr: { class: 'test' }
+                })[0];
+
+                function getCurrentColor() {
+                    return getComputedStyle(testElm).color;
+                }
+
+                createElmsWrap({ tag: 'style', text: `
+                    :root {
+                        --color: red;
+                    }
+                    p.test {
+                        -webkit-animation: test 1ms forwards;
+                                animation: test 1ms forwards;
+                    }
+                    @-webkit-keyframes test {
+                        from, to {
+                            color: var(--color);
+                        }
+                    }
+                    @keyframes test {
+                        from, to {
+                            color: var(--color);
+                        }
+                    }
+                ` });
+
+                cssVars({
+                    include   : 'style[data-test]',
+                    onlyLegacy: false,
+                    onComplete(cssText, styleNode) {
+                        expect(getCurrentColor(), 'Initial @keyframes').to.be.colored('red');
+                    }
+                });
+
+                cssVars({
+                    include   : 'style[data-test]',
+                    onlyLegacy: false,
+                    variables : {
+                        color: 'blue'
+                    },
+                    onComplete(cssText, styleNode) {
+                        expect(getCurrentColor(), 'Updated @keyframes').to.be.colored('blue');
+                    }
+                });
+            });
+        }
     });
 });

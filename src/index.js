@@ -1,15 +1,20 @@
 // Dependencies
 // =============================================================================
-import getCssData          from 'get-css-data';
-import mergeDeep           from './merge-deep';
-import transformCss        from './transform-css';
-import { name as pkgName } from '../package.json';
+import getCssData               from 'get-css-data';
+import mergeDeep                from './merge-deep';
+import transformCss             from './transform-css';
+import { variablePersistStore } from './transform-css';
+import { name as pkgName }      from '../package.json';
 
 
 // Constants & Variables
 // =============================================================================
+const isBrowser       = typeof window !== 'undefined';
+const isNativeSupport = isBrowser && window.CSS && window.CSS.supports && window.CSS.supports('(--a: 0)');
+
 const defaults = {
     // Sources
+    rootElement  : isBrowser ? document : null,
     include      : 'style,link[rel=stylesheet]',
     exclude      : '',
     // Options
@@ -17,6 +22,7 @@ const defaults = {
     onlyLegacy   : true,  // cssVars
     onlyVars     : false, // cssVars, transformCss
     preserve     : false, // transformCss
+    shadowDOM    : false, // cssVars
     silent       : false, // cssVars
     updateDOM    : true,  // cssVars
     updateURLs   : true,  // cssVars
@@ -29,18 +35,25 @@ const defaults = {
     onError() {},         // cssVars
     onComplete() {}       // cssVars
 };
-const hasNativeSupport = window && window.CSS && window.CSS.supports && window.CSS.supports('(--a: 0)');
 const regex = {
     // CSS comments
     cssComments: /\/\*[\s\S]+?\*\//g,
     // CSS keyframes (@keyframes & @-VENDOR-keyframes)
     cssKeyframes: /@(?:-\w*-)?keyframes/,
+    // CSS root vars
+    cssRootRules: /(?::root\s*{\s*[^}]*})/g,
     // CSS url(...) values
     cssUrls: /url\((?!['"]?(?:data|http|\/\/):)['"]?([^'")]*)['"]?\)/g,
     // CSS variable :root declarations and var() function values
     cssVars: /(?:(?::root\s*{\s*[^;]*;*\s*)|(?:var\(\s*))(--[^:)]+)(?:\s*[:)])/
 };
-let cssVarsObserver = null;
+
+// Mutation observer referece created via options.watch
+let cssVarsObserver  = null;
+
+// Indicates if document-level custom property values have been parsed, stored,
+// and ready for use with options.shadowDOM
+let isShadowDOMReady = false;
 
 
 // Functions
@@ -54,6 +67,8 @@ let cssVarsObserver = null;
  *
  * @preserve
  * @param {object}   [options] Options object
+ * @param {object}   [options.rootElement=document] Root element to traverse for
+ *                   <link> and <style> nodes.
  * @param {string}   [options.include="style,link[rel=stylesheet]"] CSS selector
  *                   matching <link re="stylesheet"> and <style> nodes to
  *                   process
@@ -71,6 +86,8 @@ let cssVarsObserver = null;
  * @param {boolean}  [options.preserve=false] Determines if the original CSS
  *                   custom property declaration will be retained in the
  *                   ponyfill-generated CSS.
+ * @param {boolean}  [options.shadowDOM=false] Determines if shadow DOM <link>
+ *                   and <style> nodes will be processed.
  * @param {boolean}  [options.silent=false] Determines if warning and error
  *                   messages will be displayed on the console
  * @param {boolean}  [options.updateDOM=true] Determines if the ponyfill will
@@ -102,24 +119,28 @@ let cssVarsObserver = null;
  * @param {function} [options.onComplete] Callback after all CSS has been
  *                   processed, legacy-compatible CSS has been generated, and
  *                   (optionally) the DOM has been updated. Passes 1) a CSS
- *                   string with CSS variable values resolved, and 2) a
- *                   reference to the appended <style> node.
+ *                   string with CSS variable values resolved, 2) a reference to
+ *                   the appended <style> node, and 3) an object containing all
+ *                   custom properies names and values.
  *
  * @example
  *
  *   cssVars({
- *     include      : 'style,link[rel="stylesheet"]', // default
+ *     rootElement  : document,
+ *     include      : 'style,link[rel="stylesheet"]',
  *     exclude      : '',
- *     fixNestedCalc: true,  // default
- *     onlyLegacy   : true,  // default
- *     onlyVars     : false, // default
- *     preserve     : false, // default
- *     silent       : false, // default
- *     updateDOM    : true,  // default
- *     updateURLs   : true,  // default
+ *     fixNestedCalc: true,
+ *     onlyLegacy   : true,
+ *     onlyVars     : false,
+ *     preserve     : false,
+ *     shadowDOM    : false,
+ *     silent       : false,
+ *     updateDOM    : true,
+ *     updateURLs   : true,
  *     variables    : {
  *       // ...
  *     },
+ *     watch        : false,
  *     onBeforeSend(xhr, node, url) {
  *       // ...
  *     }
@@ -138,7 +159,12 @@ let cssVarsObserver = null;
  *   });
  */
 function cssVars(options = {}) {
-    const settings = mergeDeep(defaults, options);
+    const settings    = mergeDeep(defaults, options);
+    const styleNodeId = pkgName;
+
+    // Always exclude styleNodeId element, which is the generated <style> node
+    // containing previously transformed CSS.
+    settings.exclude = `#${styleNodeId}` + (settings.exclude ? `,${settings.exclude}` : '');
 
     function handleError(message, sourceNode, xhr, url) {
         /* istanbul ignore next */
@@ -160,25 +186,77 @@ function cssVars(options = {}) {
         settings.onWarning(message);
     }
 
+    // Exit if non-browser environment (e.g. Node)
+    if (!isBrowser) {
+        return;
+    }
+
     // Verify readyState to ensure all <link> and <style> nodes are available
     if (document.readyState !== 'loading') {
-        // Lacks native support or onlyLegacy 'false'
-        if (!hasNativeSupport || !settings.onlyLegacy) {
-            const styleNodeId = pkgName;
+        const isShadowElm = settings.shadowDOM || settings.rootElement.shadowRoot || settings.rootElement.host;
 
+        // Native support
+        if (isNativeSupport && settings.onlyLegacy) {
+            // Apply settings.variables
+            if (settings.updateDOM) {
+                const targetElm = settings.rootElement.host || (settings.rootElement === document ? document.documentElement : settings.rootElement);
+
+                // Set variables using native methods
+                Object.keys(settings.variables).forEach(key => {
+                    // Convert all property names to leading '--' style
+                    const prop  = `--${key.replace(/^-+/, '')}`;
+                    const value = settings.variables[key];
+
+                    targetElm.style.setProperty(prop, value);
+                });
+            }
+        }
+        // Ponyfill: Handle rootElement set to a shadow host or root
+        else if (isShadowElm && !isShadowDOMReady) {
+            // Get all document-level CSS
+            getCssData({
+                rootElement: defaults.rootElement,
+                include: defaults.include,
+                exclude: settings.exclude,
+                onSuccess(cssText, node, url) {
+                    const cssRootDecls = (cssText.match(regex.cssRootRules) || []).join('');
+
+                    // Return only matching :root {...} blocks
+                    return cssRootDecls || false;
+                },
+                onComplete(cssText, cssArray, nodeArray) {
+                    // Transform CSS, which stores custom property values from
+                    // cssText in variablePersistStore. This step ensures that
+                    // variablePersistStore contains all document-level custom
+                    // property values for subsequent ponyfill calls.
+                    transformCss(cssText, {
+                        persist: true
+                    });
+
+                    isShadowDOMReady = true;
+
+                    // Call the ponyfill again to process the rootElement
+                    // initially specified. Values stored in variablePersistStore
+                    // will be used to transform values in shadow host/root
+                    // elements.
+                    cssVars(settings);
+                }
+            });
+        }
+        // Ponyfill: Process CSS
+        else {
             if (settings.watch) {
                 addMutationObserver(settings, styleNodeId);
             }
 
             getCssData({
+                rootElement: settings.rootElement,
                 include: settings.include,
-                // Always exclude styleNodeId element, which is the generated
-                // <style> node containing previously transformed CSS.
-                exclude: `#${styleNodeId}` + (settings.exclude ? `,${settings.exclude}` : ''),
+                exclude: settings.exclude,
                 // This filter does a test on each block of CSS. An additional
                 // filter is used in the parser to remove individual
                 // declarations.
-                filter : settings.onlyVars ? regex.cssVars : null,
+                filter: settings.onlyVars ? regex.cssVars : null,
                 onBeforeSend: settings.onBeforeSend,
                 onSuccess(cssText, node, url) {
                     const returnVal = settings.onSuccess(cssText, node, url);
@@ -232,22 +310,15 @@ function cssVars(options = {}) {
                             onWarning    : handleWarning
                         });
 
-                        const hasKeyframes   = regex.cssKeyframes.test(cssText);
-                        let   cssMarkerMatch = cssMarker.exec(cssText);
+                        const hasKeyframes = regex.cssKeyframes.test(cssText);
 
                         // Replace markers with appropriate cssArray item
-                        while (cssMarkerMatch !== null) {
-                            const matchedText   = cssMarkerMatch[0];
-                            const cssArrayIndex = cssMarkerMatch[1];
-
-                            cssText = cssText.replace(matchedText, cssArray[cssArrayIndex]);
-                            cssMarkerMatch = cssMarker.exec(cssText);
-                        }
+                        cssText = cssText.replace(cssMarker, (match, group1) => cssArray[group1]);
 
                         if (settings.updateDOM && nodeArray && nodeArray.length) {
                             const lastNode = nodeArray[nodeArray.length - 1];
 
-                            styleNode = document.querySelector(`#${styleNodeId}`) || document.createElement('style');
+                            styleNode = settings.rootElement.querySelector(`#${styleNodeId}`) || document.createElement('style');
                             styleNode.setAttribute('id', styleNodeId);
 
                             if (styleNode.textContent !== cssText) {
@@ -255,12 +326,12 @@ function cssVars(options = {}) {
                             }
 
                             // Insert <style> element after last nodeArray item
-                            if (lastNode.nextSibling !== styleNode) {
+                            if (lastNode.nextSibling !== styleNode && lastNode.parentNode) {
                                 lastNode.parentNode.insertBefore(styleNode, lastNode.nextSibling);
                             }
 
                             if (hasKeyframes) {
-                                fixKeyframes();
+                                fixKeyframes(settings.rootElement);
                             }
                         }
                     }
@@ -289,21 +360,33 @@ function cssVars(options = {}) {
                         }
                     }
 
-                    settings.onComplete(cssText, styleNode);
+                    // Process shadow DOM
+                    if (settings.shadowDOM) {
+                        const elms = [
+                            settings.rootElement,
+                            ...settings.rootElement.querySelectorAll('*')
+                        ];
+
+                        // Iterates over all elements in rootElement and calls
+                        // cssVars on each shadowRoot, passing document-level
+                        // custom properties as options.variables.
+                        for (let i = 0, elm; (elm = elms[i]); ++i) {
+                            if (elm.shadowRoot && elm.shadowRoot.querySelector('style')) {
+                                const shadowSettings = mergeDeep(settings, {
+                                    rootElement: elm.shadowRoot,
+                                    variables  : variablePersistStore
+                                });
+
+                                cssVars(shadowSettings);
+                            }
+                        }
+                    }
+
+                    settings.onComplete(cssText, styleNode, variablePersistStore);
                 }
             });
         }
-        // Has native support
-        else if (hasNativeSupport && settings.updateDOM) {
-            // Set variables using native methods
-            Object.keys(settings.variables).forEach(key => {
-                // Convert all property names to leading '--' style
-                const prop  = `--${key.replace(/^-+/, '')}`;
-                const value = settings.variables[key];
 
-                document.documentElement.style.setProperty(prop, value);
-            });
-        }
     }
     // Delay function until DOMContentLoaded event is fired
     /* istanbul ignore next */
@@ -375,30 +458,38 @@ function addMutationObserver(settings, ignoreId) {
  * Fixes issue keyframe properties set using CSS custom property not being
  * applied properly in some legacy (IE) and modern (Safari) browsers.
  */
-function fixKeyframes() {
-    const allNodes      = document.body.getElementsByTagName('*');
-    const keyframeNodes = [];
-    const nameMarker    = '__css-vars-keyframe__';
+function fixKeyframes(rootElement) {
+    const animationNameProp = [
+        'animation-name',
+        '-moz-animation-name',
+        '-webkit-animation-name'
+    ].filter(prop => getComputedStyle(document.body)[prop])[0];
 
-    // Modify animation name
-    for (let i = 0, len = allNodes.length; i < len; i++) {
-        const node = allNodes[i];
-        const animationName = window.getComputedStyle(node).animationName;
+    if (animationNameProp) {
+        const allNodes      = rootElement.getElementsByTagName('*');
+        const keyframeNodes = [];
+        const nameMarker    = '__CSSVARSPONYFILL-KEYFRAMES__';
 
-        if (animationName !== 'none') {
-            node.style.animationName += nameMarker;
-            keyframeNodes.push(node);
+        // Modify animation name
+        for (let i = 0, len = allNodes.length; i < len; i++) {
+            const node          = allNodes[i];
+            const animationName = getComputedStyle(node)[animationNameProp];
+
+            if (animationName !== 'none') {
+                node.style[animationNameProp] += nameMarker;
+                keyframeNodes.push(node);
+            }
         }
-    }
 
-    // Force reflow
-    void document.body.offsetHeight;
+        // Force reflow
+        void document.body.offsetHeight;
 
-    // Restore animation name
-    for (let i = 0, len = keyframeNodes.length; i < len; i++) {
-        const nodeStyle = keyframeNodes[i].style;
+        // Restore animation name
+        for (let i = 0, len = keyframeNodes.length; i < len; i++) {
+            const nodeStyle = keyframeNodes[i].style;
 
-        nodeStyle.animationName = nodeStyle.animationName.replace(nameMarker, '');
+            nodeStyle[animationNameProp] = nodeStyle[animationNameProp].replace(nameMarker, '');
+        }
     }
 }
 

@@ -4,7 +4,7 @@ const path = require('path');
 
 import babel      from 'rollup-plugin-babel';
 import commonjs   from 'rollup-plugin-commonjs';
-import eslint     from 'rollup-plugin-eslint';
+import { eslint } from 'rollup-plugin-eslint';
 import json       from 'rollup-plugin-json';
 import merge      from 'lodash.merge';
 import pkg        from './package.json';
@@ -38,15 +38,12 @@ const pluginSettings = {
     babel: {
         exclude: ['node_modules/**'],
         presets: [
-            ['env', {
+            ['@babel/env', {
                 modules: false,
                 targets: {
                     browsers: ['ie >= 9']
                 }
             }]
-        ],
-        plugins: [
-            'external-helpers'
         ]
     },
     terser: {

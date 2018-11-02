@@ -1,15 +1,73 @@
 # Change Log
 
+## 1.12.0
+
+*2018-10-25*
+
+- Added TypeScript definitions.
+
+## 1.11.3
+
+*2018-10-24*
+
+- Fixed bug in modern browsers that caused `option.variables` values to be
+  applied to the `document` instead of the `options.rootElement`, resulting
+  in custom properties being applied to all elements instead of scoped to the
+  specified root element.
+
+## 1.11.0
+
+*2018-10-03*
+
+- Added logic to automatically get document-level CSS custom property values
+  when `option.rootElement` has been set to a shadow host or root. These values
+  are required by the polyfill to transform shadow `<link>` and `<style>` nodes.
+  This new behavior makes it possible to target a shadow host or root element
+  without manually getting the document-level custom property values first.
+
+- Fixed custom property values not persisting when CSS being processed contains
+  only custom properties.
+
+- Fixed ‘document is not defined’ error in SSR environment introduced in 1.10.0.
+
+## 1.10.0
+
+*2018-09-28*
+
+- Added `options.rootElement` for specifying the root element to traverse for
+  `<link>` and `<style>` nodes.
+
+- Added `options.shadowDOM` to determine if shadow DOM `<link>` and `<style>`
+  nodes should be processed.
+
+- Added `cssVariables` argument to `options.onComplete` callback.
+
+## 1.9.0
+
+*2018-08-07*
+
+- Added check for non-browser environments to support Node+SSR. (#16)
+
+- Updated keyframe animation fix to support legacy browsers that require vendor
+  prefixes for `animation-name` and `@keyframes`.
+
+- Fixed internal placeholder comments appearing in CSS output instead of
+  stylesheet content. (#15)
+
+- Fixed multiple var() functions resolving to `undefined` when they do not
+  resolve to a custom property or fallback value. (#18)
+
 ## 1.8.0
 
 *2018-07-12*
 
 - Added `options.watch` feature which creates a MutationObserver that will
   execute the ponyfill when a `<link>` or `<style>` DOM mutation is observed.
+  (#8)
 
 - Added fix for browser-related bugs that prevent keyframe animations from being
   applied when values are initially set using custom properties or updated using
-  the `variables` ponyfill option.
+  the `variables` ponyfill option. (#13)
 
 - Fixed inaccurate “variable is undefined” console warning when a custom
   property value is `0` or `false`.
@@ -39,20 +97,20 @@
 *2018-05-18*
 
 - Improved performance when processing `<link>` and `<style>` data that does not
-  contain a CSS custom property declaration or function.
+  contain a CSS custom property declaration or function. (#9)
 
 ## 1.6.0
 
 *2018-05-17*
 
 - Added `options.updateURLs` for converting relative `url()` paths to absolute
-  urls.
+  urls. (#8)
 
 ## 1.5.0
 
 *2018-05-16*
 
-- Added `options.onBeforeSend` callback.
+- Added `options.onBeforeSend` callback. (#7)
 
 - Changed `options.onSuccess` callback so that it is called after CSS data has
   been collected from each node before CSS custom properties have been
@@ -97,7 +155,7 @@
 *2018-03-20*
 
 - Fixed "Cannot read property 'length' of undefined" bug triggered while
-  filtering comments that are a direct descendant of an at-rule.
+  filtering comments that are a direct descendant of an at-rule. (#1)
 
 ## 1.1.2
 

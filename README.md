@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/jhildenbiddle/css-vars-ponyfill/blob/master/LICENSE)
 [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/intent/tweet?url=https%3A%2F%2Fgithub.com%2Fjhildenbiddle%2Fcss-vars-ponyfill&hashtags=css,developers,frontend,javascript)
 
-A [ponyfill](https://ponyfill.com/) that provides client-side support for [CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/--*) (aka "CSS variables") in legacy browsers.
+A [ponyfill](https://ponyfill.com/) that provides client-side support for [CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/--*) (aka "CSS variables") in legacy and modern browsers.
 
 - [Demo](https://codepen.io/jhildenbiddle/pen/ZxYJrR/) (CodePen)
 
@@ -29,12 +29,14 @@ A [ponyfill](https://ponyfill.com/) that provides client-side support for [CSS c
 - Live updates of runtime values in both modern and legacy browsers
 - Auto-updates on `<link>` and `<style>` changes
 - Transforms `<link>`, `<style>`, and `@import` CSS
+- Transforms shadow DOM `<link>` and `<style>` CSS
 - Transforms relative `url()` paths to absolute URLs
 - Supports chained custom property references
 - Supports complex values
 - Supports fallback values
 - UMD and ES6 module available
-- Lightweight (5k min+gzip) and dependency-free
+- TypeScript definitions included
+- Lightweight (6k min+gzip) and dependency-free
 
 **Limitations**
 
@@ -55,14 +57,6 @@ NPM:
 npm install css-vars-ponyfill
 ```
 
-```javascript
-// file.js
-import cssVars from 'css-vars-ponyfill';
-cssVars({
-  // ...
-});
-```
-
 Git:
 
 ```bash
@@ -73,6 +67,7 @@ CDN ([unpkg.com](https://unpkg.com/) shown, also on [jsdelivr.net](https://www.j
 
 ```html
 <!-- file.html (latest v1.x.x) -->
+
 <script src="https://unpkg.com/css-vars-ponyfill@1"></script>
 <script>
   cssVars({
@@ -126,7 +121,7 @@ import cssVars from 'css-vars-ponyfill';
 // Call using defaults
 cssVars();
 
-// Or call with options
+// Call with options
 cssVars({
   // ...
 });
@@ -186,12 +181,14 @@ Values will be updated in both legacy and modern browsers:
 
 ## Options
 
+- [rootElement](#optionsrootelement)
 - [include](#optionsinclude)
 - [exclude](#optionsexclude)
 - [fixNestedCalc](#optionsfixnestedcalc)
 - [onlyLegacy](#optionsonlylegacy)
 - [onlyVars](#optionsonlyvars)
 - [preserve](#optionspreserve)
+- [shadowDOM](#optionsshadowdom)
 - [silent](#optionssilent)
 - [updateDOM](#optionsupdatedom)
 - [updateURLs](#optionsupdateurls)
@@ -206,14 +203,16 @@ Values will be updated in both legacy and modern browsers:
 **Example**
 
 ```javascript
-// Default values shown
+// All options (default values shown)
 cssVars({
+  rootElement  : document,
   include      : 'link[rel=stylesheet],style',
   exclude      : '',
   fixNestedCalc: true,
   onlyLegacy   : true,
   onlyVars     : false,
   preserve     : false,
+  shadowDOM    : false,
   silent       : false,
   updateDOM    : true,
   updateURLs   : true,
@@ -233,9 +232,30 @@ cssVars({
   onError(message, node, xhr, url) {
     // ...
   },
-  onComplete(cssText, styleNode) {
+  onComplete(cssText, styleNode, cssVariables) {
     // ...
   }
+});
+```
+
+### options.rootElement
+
+- Type: `object`
+- Default: `document`
+
+Root element containing `<link rel="stylesheet">` and `<style>` nodes to process.
+
+**Examples**
+
+```javascript
+// Document
+cssVars({
+  rootElement: document // default
+});
+
+// Shadow DOM
+cssVars({
+  rootElement: document.querySelector('custom-element').shadowRoot
 });
 ```
 
@@ -352,9 +372,9 @@ p {
 - Type: `boolean`
 - Default: `true`
 
-Determines if the ponyfill will only generate legacy-compatible CSS in browsers that lack native support (i.e., legacy browsers).
+Determines if the ponyfill will ignore modern browsers with native CSS custom property support.
 
-When `true`, the ponyfill will only generate legacy-compatible CSS, trigger callbacks, and (optionally) update the DOM in browsers that lack native support. When `false`, the ponyfill will treat all browsers as legacy, regardless of their support for CSS custom properties.
+When `true`, the ponyfill will only transform custom properties, generate CSS, and trigger callbacks in legacy browsers that lack native support. When `false`, the ponyfill will treat all browsers as legacy, regardless of their support for CSS custom properties.
 
 **Example**
 
@@ -470,6 +490,33 @@ p {
   color: red;
   color: var(--color);
 }
+```
+
+### options.shadowDOM
+
+- Type: `boolean`
+- Default: `false`
+
+Determines if shadow DOM tree(s) nested within the [options.rootElement](#optionsrootelement) will be processed.
+
+**Example**
+
+```javascript
+// Do no process shadow DOM trees
+cssVars({
+  shadowDOM: false // default
+});
+
+// Process all shadow DOM trees in document
+cssVars({
+  shadowDOM: true
+});
+
+// Process all shadow DOM trees in custom element
+cssVars({
+  rootElement: document.querySelector('my-element'),
+  shadowDOM  : true
+});
 ```
 
 ### options.silent
@@ -603,17 +650,19 @@ div {
 - Type: `object`
 - Default: `{}`
 
-A map of custom property name/value pairs. Property names can omit or include the leading double-hyphen (`--`), and values specified will override previous values.
+A map of custom property name/value pairs to apply to both legacy and modern browsers. Property names can include or omit the leading double-hyphen (`--`). Values specified will override previous values.
 
-Legacy browsers will process these values while generating legacy-compatible CSS. Modern browsers with native custom property support will apply these values using the native [setProperty()](https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleDeclaration/setProperty) method when [options.updateDOM](#optionsupdatedom) is `true`.
+Legacy browsers will process these values while generating legacy-compatible CSS. Modern browsers with native support for CSS custom properties will add/update these values using the [setProperty()](https://developer.mozilla.org/en-US/docs/Web/API/CSSStyleDeclaration/setProperty) method when [options.updateDOM](#optionsupdatedom) is `true`.
+
+**Note:** Although this option affects both legacy and modern browsers, ponyfill callbacks like (e.g. [onComplete](#oncomplete)) will only be triggered in legacy browsers (or in modern browsers when [onlyLegacy](#optionsonlylegacy) is `false`).
 
 **Example**
 
 ```javascript
 cssVars({
   variables: {
-    color1    : 'red',
-    '--color2': 'green'
+    '--color1': 'red',  // Leading -- included
+    'color2'  : 'green' // Leading -- omitted
   }
 });
 ```
@@ -627,7 +676,7 @@ Determines if a [MutationObserver](https://developer.mozilla.org/en-US/docs/Web/
 
 When `true`, the ponyfill will call itself when a `<link>` or `<style>` node is added, removed, or has its `disabled` or `href` attribute modified. The settings used will be the same as those passed to the ponyfill the first time `options.watch` was set to `true`.
 
-Note that this feature requires either [native support for MutationObserver](https://caniuse.com/#feat=mutationobserver) or a [polyfill](https://polyfill.io/v2/docs/) for legacy browsers.
+**Note:** This feature requires native [support for MutationObserver](https://caniuse.com/#feat=mutationobserver) or a [polyfill](https://polyfill.io/v2/docs/) for legacy browsers.
 
 **Example**
 
@@ -672,7 +721,7 @@ cssVars({
 
 Callback after CSS data has been collected from each node and *before* CSS custom properties have been transformed. Allows modifying the CSS data before it is transformed by returning any `string` value (or `false` to skip).
 
-Note that the order in which `<link>` and `@import` CSS data is "successfully" collected (thereby triggering this callback) is not guaranteed as these requests are asynchronous.
+**Note:** The order in which `<link>` and `@import` CSS data is "successfully" collected (thereby triggering this callback) is not guaranteed as these requests are asynchronous.
 
 **Example**
 
@@ -762,6 +811,7 @@ cssVars({
 - Arguments:
   1. **cssText**: A `string` of concatenated CSS text from all nodes in DOM order
   1. **styleNode**: An `object` reference to the appended `<style>` node
+  1. **cssVariables**: An `object` containing CSS custom property names and values
 
 Callback after all CSS has been processed, legacy-compatible CSS has been generated, and (optionally) the DOM has been updated.
 
@@ -769,7 +819,7 @@ Callback after all CSS has been processed, legacy-compatible CSS has been genera
 
 ```javascript
 cssVars({
-  onComplete(cssText, styleNode) {
+  onComplete(cssText, styleNode, cssVariables) {
     // ...
   }
 });
