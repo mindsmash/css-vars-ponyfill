@@ -16,7 +16,7 @@ import { terser } from 'rollup-plugin-terser';
 // =============================================================================
 // Output
 const entryFile  = path.resolve(__dirname, 'src', 'index.js');
-const outputFile = path.resolve(__dirname, 'dist', `${pkg.name}.js`);
+const outputFile = path.resolve(__dirname, 'dist', `${pkg.name}.js`).replace('/@coyo', '');
 const outputName = 'cssVars';
 
 // Banner

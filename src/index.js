@@ -4,7 +4,6 @@ import getCssData          from 'get-css-data';
 import mergeDeep           from './merge-deep';
 import transformCss        from './transform-css';
 import { variableStore }   from './transform-css';
-import { name as pkgName } from '../package.json';
 
 
 // Constants & Variables
@@ -160,7 +159,7 @@ let isShadowDOMReady = false;
  */
 function cssVars(options = {}) {
     const settings    = mergeDeep(defaults, options);
-    const styleNodeId = pkgName;
+    const styleNodeId = 'css-vars-ponyfill';
 
     // Always exclude styleNodeId element, which is the generated <style> node
     // containing previously transformed CSS.
