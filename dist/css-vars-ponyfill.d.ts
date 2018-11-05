@@ -1,4 +1,4 @@
-declare module 'css-vars-ponyfill' {
+declare module '@coyo/css-vars-ponyfill' {
     export default function cssVars(options?: {
         rootElement?: HTMLElement|Node;
         include?: string;

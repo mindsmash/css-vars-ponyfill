@@ -1,6 +1,6 @@
 /*!
  * @coyo/css-vars-ponyfill
- * v1.12.1-0
+ * v1.12.1-1
  * https://github.com/mindsmash/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
