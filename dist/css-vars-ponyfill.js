@@ -1,7 +1,7 @@
 /*!
- * css-vars-ponyfill
- * v1.12.1
- * https://github.com/jhildenbiddle/css-vars-ponyfill
+ * @coyo/css-vars-ponyfill
+ * v1.12.1-0
+ * https://github.com/mindsmash/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
  */
@@ -953,7 +953,6 @@
             return varFuncData.pre + resolveFunc(varFuncData.body) + resolveValue(varFuncData.post, map, settings);
         }
     }
-    var name = "css-vars-ponyfill";
     var isBrowser = typeof window !== "undefined";
     var isNativeSupport = isBrowser && window.CSS && window.CSS.supports && window.CSS.supports("(--a: 0)");
     var defaults = {
@@ -1087,7 +1086,7 @@
    */    function cssVars() {
         var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
         var settings = mergeDeep(defaults, options);
-        var styleNodeId = name;
+        var styleNodeId = "css-vars-ponyfill";
         settings.exclude = "#".concat(styleNodeId) + (settings.exclude ? ",".concat(settings.exclude) : "");
         function handleError(message, sourceNode, xhr, url) {
             if (!settings.silent) {

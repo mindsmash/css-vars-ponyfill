@@ -1,16 +1,19 @@
 {
-  "name": "css-vars-ponyfill",
-  "version": "1.12.1",
+  "name": "@coyo/css-vars-ponyfill",
+  "version": "1.12.1-0",
   "description": "A ponyfill that provides client-side support for CSS custom properties (aka \"CSS variables\") in legacy and modern browsers",
   "author": "John Hildenbiddle <http://hildenbiddle.com>",
   "license": "MIT",
-  "homepage": "https://github.com/jhildenbiddle/css-vars-ponyfill",
+  "homepage": "https://github.com/mindsmash/css-vars-ponyfill",
   "repository": {
     "type": "git",
-    "url": "git+https://jhildenbiddle@github.com/jhildenbiddle/css-vars-ponyfill.git"
+    "url": "git+https://github.com/mindsmash/css-vars-ponyfill.git"
   },
   "bugs": {
     "url": "https://github.com/jhildenbiddle/css-vars-ponyfill/issues"
+  },
+  "publishConfig": {
+    "registry": "https://mindsmash.jfrog.io/mindsmash/api/npm/coyo-frontend/"
   },
   "keywords": [
     "client",
