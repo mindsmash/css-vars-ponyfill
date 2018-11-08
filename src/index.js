@@ -380,7 +380,7 @@ function cssVars(options = {}) {
                         }
                     }
 
-                    settings.onComplete(cssText, styleNode, settings.updateDOM ? variableStore.persist : variableStore.noPersist);
+                    settings.onComplete(cssText, styleNode, settings.updateDOM ? variableStore.persist : variableStore.noPersist, cssVarsObserver);
                 }
             });
         }
@@ -449,6 +449,13 @@ function addMutationObserver(settings, ignoreId) {
             childList      : true,
             subtree        : true
         });
+
+        cssVarsObserver._disconnect = cssVarsObserver.disconnect;
+        cssVarsObserver.disconnect = function () {
+            this._disconnect();
+            cssVarsObserver = undefined;
+        };
+
     }
 }
 
