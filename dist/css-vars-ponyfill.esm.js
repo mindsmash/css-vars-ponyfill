@@ -1,6 +1,6 @@
 /*!
  * @coyo/css-vars-ponyfill
- * v1.12.1-3
+ * v1.12.1-4
  * https://github.com/mindsmash/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
@@ -1298,6 +1298,7 @@ function addMutationObserver(settings, ignoreId) {
             childList: true,
             subtree: true
         });
+        return cssVarsObserver;
     }
 }
 
