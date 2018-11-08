@@ -1,7 +1,7 @@
 /*!
- * @coyo/css-vars-ponyfill
- * v1.12.1-6
- * https://github.com/mindsmash/css-vars-ponyfill
+ * css-vars-ponyfill
+ * v1.12.2
+ * https://github.com/jhildenbiddle/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
  */
@@ -752,8 +752,9 @@ var VAR_PROP_IDENTIFIER = "--";
 var VAR_FUNC_IDENTIFIER = "var";
 
 var variableStore = {
-    persist: {},
-    noPersist: {}
+    dom: {},
+    temp: {},
+    user: {}
 };
 
 function transformVars(cssText) {
@@ -767,7 +768,7 @@ function transformVars(cssText) {
         onWarning: function onWarning() {}
     };
     var settings = mergeDeep(defaults, options);
-    var map = settings.persist ? variableStore.persist : variableStore.noPersist = JSON.parse(JSON.stringify(variableStore.persist));
+    var map = settings.persist ? variableStore.dom : variableStore.temp = JSON.parse(JSON.stringify(variableStore.dom));
     var cssTree = cssParse(cssText);
     if (settings.onlyVars) {
         cssTree.stylesheet.rules = filterVars(cssTree.stylesheet.rules);
@@ -794,6 +795,9 @@ function transformVars(cssText) {
             }
         }
     });
+    Object.keys(variableStore.user).forEach(function(key) {
+        map[key] = variableStore.user[key];
+    });
     if (Object.keys(settings.variables).length) {
         var newRule = {
             declarations: [],
@@ -803,6 +807,9 @@ function transformVars(cssText) {
         Object.keys(settings.variables).forEach(function(key) {
             var prop = "--".concat(key.replace(/^-+/, ""));
             var value = settings.variables[key];
+            if (settings.persist) {
+                variableStore.user[prop] = value;
+            }
             if (map[prop] !== value) {
                 map[prop] = value;
                 newRule.declarations.push({
@@ -829,7 +836,7 @@ function transformVars(cssText) {
             if (!value || value.indexOf(VAR_FUNC_IDENTIFIER + "(") === -1) {
                 continue;
             }
-            resolvedValue = fixHslCalc(resolveValue(value, map, settings));
+            resolvedValue = resolveValue(value, map, settings);
             if (resolvedValue !== decl.value) {
                 if (!settings.preserve) {
                     decl.value = resolvedValue;
@@ -903,45 +910,6 @@ function fixNestedCalc(rules) {
     });
 }
 
-function fixHslCalc(value) {
-    var reHslExp = /hsla?\(/;
-    var reCalcExp = /(-[a-z]+-)?calc\(/;
-    var oldValue = value;
-    var newValue = "";
-    while (reHslExp.test(oldValue)) {
-        var rootCalc = balancedMatch("(", ")", oldValue || "");
-        oldValue = oldValue.slice(rootCalc.end);
-        while (reCalcExp.test(rootCalc.body)) {
-            var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
-            rootCalc.body = "".concat(nestedCalc.pre) + resolveExpression(nestedCalc.body) + nestedCalc.post;
-        }
-        newValue += rootCalc.pre + "(" + rootCalc.body;
-        newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
-    }
-    return newValue || value;
-}
-
-function resolveExpression(expr) {
-    var regex = /^\s*(\d+(?:\.\d+)?)%\s*$/;
-    var parts = expr.split(/(\+|-)/);
-    var sum = (parts[0] || "").match(regex);
-    if (!sum) {
-        return expr;
-    }
-    sum = parseFloat(sum[1]);
-    for (var i = 1; i < parts.length - 1; i += 2) {
-        var num = parts[i + 1].match(regex);
-        if (num && parts[i] === "+") {
-            sum += parseFloat(num[1]);
-        } else if (num && parts[i] === "-") {
-            sum -= parseFloat(num[1]);
-        } else {
-            return expr;
-        }
-    }
-    return sum + "%";
-}
-
 function resolveValue(value, map) {
     var settings = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
     var __recursiveFallback = arguments.length > 3 ? arguments[3] : undefined;
@@ -974,6 +942,8 @@ function resolveValue(value, map) {
         return varFuncData.pre + resolveFunc(varFuncData.body) + resolveValue(varFuncData.post, map, settings);
     }
 }
+
+var name = "css-vars-ponyfill";
 
 var isBrowser = typeof window !== "undefined";
 
@@ -1114,7 +1084,7 @@ var isShadowDOMReady = false;
  */ function cssVars() {
     var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
     var settings = mergeDeep(defaults, options);
-    var styleNodeId = "css-vars-ponyfill";
+    var styleNodeId = name;
     settings.exclude = "#".concat(styleNodeId) + (settings.exclude ? ",".concat(settings.exclude) : "");
     function handleError(message, sourceNode, xhr, url) {
         if (!settings.silent) {
@@ -1242,13 +1212,13 @@ var isShadowDOMReady = false;
                             if (elm.shadowRoot && elm.shadowRoot.querySelector("style")) {
                                 var shadowSettings = mergeDeep(settings, {
                                     rootElement: elm.shadowRoot,
-                                    variables: variableStore.persist
+                                    variables: variableStore.dom
                                 });
                                 cssVars(shadowSettings);
                             }
                         }
                     }
-                    settings.onComplete(cssText, styleNode, settings.updateDOM ? variableStore.persist : variableStore.noPersist, cssVarsObserver);
+                    settings.onComplete(cssText, styleNode, JSON.parse(JSON.stringify(settings.updateDOM ? variableStore.dom : variableStore.temp)));
                 }
             });
         }
@@ -1297,11 +1267,6 @@ function addMutationObserver(settings, ignoreId) {
             childList: true,
             subtree: true
         });
-        cssVarsObserver._disconnect = cssVarsObserver.disconnect;
-        cssVarsObserver.disconnect = function() {
-            this._disconnect();
-            cssVarsObserver = undefined;
-        };
     }
 }
 
