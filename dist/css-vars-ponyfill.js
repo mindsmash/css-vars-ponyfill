@@ -1,6 +1,6 @@
 /*!
  * @coyo/css-vars-ponyfill
- * v1.12.1-4
+ * v1.12.1-5
  * https://github.com/mindsmash/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
@@ -1132,9 +1132,8 @@
                     }
                 });
             } else {
-                var mutationObserver;
                 if (settings.watch) {
-                    mutationObserver = addMutationObserver(settings, styleNodeId);
+                    addMutationObserver(settings, styleNodeId);
                 }
                 getCssData({
                     rootElement: settings.rootElement,
@@ -1221,7 +1220,7 @@
                                 }
                             }
                         }
-                        settings.onComplete(cssText, styleNode, settings.updateDOM ? variableStore.persist : variableStore.noPersist, mutationObserver);
+                        settings.onComplete(cssText, styleNode, settings.updateDOM ? variableStore.persist : variableStore.noPersist, cssVarsObserver);
                     }
                 });
             }
@@ -1269,7 +1268,6 @@
                 childList: true,
                 subtree: true
             });
-            return cssVarsObserver;
         }
     }
     function fixKeyframes(rootElement) {
