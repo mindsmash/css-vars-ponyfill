@@ -1,7 +1,7 @@
 /*!
- * css-vars-ponyfill
+ * @coyo/css-vars-ponyfill
  * v1.14.0
- * https://github.com/jhildenbiddle/css-vars-ponyfill
+ * https://github.com/mindsmash/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
  */
@@ -26,7 +26,7 @@
     }
     /*!
    * get-css-data
-   * v1.5.0
+   * v1.4.0
    * https://github.com/jhildenbiddle/get-css-data
    * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
    * MIT license
@@ -43,11 +43,6 @@
         var urlQueue = Array.apply(null, Array(urlArray.length)).map(function(x) {
             return null;
         });
-        function isValidCss() {
-            var cssText = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
-            var isHTML = cssText.trim().charAt(0) === "<";
-            return !isHTML;
-        }
         function onError(xhr, urlIndex) {
             settings.onError(xhr, urlArray[urlIndex], urlIndex);
         }
@@ -73,11 +68,7 @@
                     xdr.onprogress = Function.prototype;
                     xdr.ontimeout = Function.prototype;
                     xdr.onload = function() {
-                        if (isValidCss(xdr.responseText)) {
-                            onSuccess(xdr.responseText, i);
-                        } else {
-                            onError(xdr, i);
-                        }
+                        onSuccess(xdr.responseText, i);
                     };
                     xdr.onerror = function(err) {
                         onError(xdr, i);
@@ -98,7 +89,7 @@
                 settings.onBeforeSend(xhr, url, i);
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState === 4) {
-                        if (xhr.status === 200 && isValidCss(xhr.responseText)) {
+                        if (xhr.status === 200) {
                             onSuccess(xhr.responseText, i);
                         } else {
                             onError(xhr, i);
@@ -829,7 +820,7 @@
                 if (!value || value.indexOf(VAR_FUNC_IDENTIFIER + "(") === -1) {
                     continue;
                 }
-                resolvedValue = resolveValue(value, map, settings);
+                resolvedValue = fixHslCalc(resolveValue(value, map, settings));
                 if (resolvedValue !== decl.value) {
                     if (!settings.preserve) {
                         decl.value = resolvedValue;
@@ -900,6 +891,43 @@
             }
         });
     }
+    function fixHslCalc(value) {
+        var reHslExp = /hsla?\(/;
+        var reCalcExp = /(-[a-z]+-)?calc\(/;
+        var oldValue = value;
+        var newValue = "";
+        while (reHslExp.test(oldValue)) {
+            var rootCalc = balancedMatch("(", ")", oldValue || "");
+            oldValue = oldValue.slice(rootCalc.end);
+            while (reCalcExp.test(rootCalc.body)) {
+                var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
+                rootCalc.body = "".concat(nestedCalc.pre) + resolveExpression(nestedCalc.body) + nestedCalc.post;
+            }
+            newValue += rootCalc.pre + "(" + rootCalc.body;
+            newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
+        }
+        return newValue || value;
+    }
+    function resolveExpression(expr) {
+        var regex = /^\s*(\d+(?:\.\d+)?)%\s*$/;
+        var parts = expr.split(/(\+|-)/);
+        var sum = (parts[0] || "").match(regex);
+        if (!sum) {
+            return expr;
+        }
+        sum = parseFloat(sum[1]);
+        for (var i = 1; i < parts.length - 1; i += 2) {
+            var num = parts[i + 1].match(regex);
+            if (num && parts[i] === "+") {
+                sum += parseFloat(num[1]);
+            } else if (num && parts[i] === "-") {
+                sum -= parseFloat(num[1]);
+            } else {
+                return expr;
+            }
+        }
+        return sum + "%";
+    }
     function resolveValue(value, map) {
         var settings = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
         var __recursiveFallback = arguments.length > 3 ? arguments[3] : undefined;
@@ -932,7 +960,6 @@
             return varFuncData.pre + resolveFunc(varFuncData.body) + resolveValue(varFuncData.post, map, settings);
         }
     }
-    var name = "css-vars-ponyfill";
     var isBrowser = typeof window !== "undefined";
     var isNativeSupport = isBrowser && window.CSS && window.CSS.supports && window.CSS.supports("(--a: 0)");
     var defaults = {
@@ -1066,7 +1093,7 @@
    */    function cssVars() {
         var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
         var settings = mergeDeep(defaults, options);
-        var styleNodeId = name;
+        var styleNodeId = "css-vars-ponyfill";
         settings.exclude = "#".concat(styleNodeId) + (settings.exclude ? ",".concat(settings.exclude) : "");
         function handleError(message, sourceNode, xhr, url) {
             if (!settings.silent) {
