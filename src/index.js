@@ -26,7 +26,7 @@ const defaults = {
     updateDOM    : true,  // cssVars
     updateURLs   : true,  // cssVars
     variables    : {},    // transformCss
-    watch        : false, // cssVars
+    watch        : null,  // cssVars
     // Callbacks
     onBeforeSend() {},    // cssVars
     onSuccess() {},       // cssVars
@@ -243,8 +243,13 @@ function cssVars(options = {}) {
         }
         // Ponyfill: Process CSS
         else {
+            // Add / recreate MutationObserver
             if (settings.watch) {
                 addMutationObserver(settings, styleNodeId);
+            }
+            // Disconnect existing
+            else if (settings.watch === false && cssVarsObserver) {
+                cssVarsObserver.disconnect();
             }
 
             getCssData({
@@ -380,7 +385,7 @@ function cssVars(options = {}) {
                         }
                     }
 
-                    settings.onComplete(cssText, styleNode, JSON.parse(JSON.stringify(settings.updateDOM ? variableStore.dom : variableStore.temp)), cssVarsObserver);
+                    settings.onComplete(cssText, styleNode, JSON.parse(JSON.stringify(settings.updateDOM ? variableStore.dom : variableStore.temp)));
                 }
             });
         }
@@ -408,60 +413,63 @@ function cssVars(options = {}) {
  * @param {string} ignoreId
  */
 function addMutationObserver(settings, ignoreId) {
-    if (window.MutationObserver && !cssVarsObserver) {
-        const isLink  = node => node.tagName === 'LINK' && (node.getAttribute('rel') || '').indexOf('stylesheet') !== -1;
-        const isStyle = node => node.tagName === 'STYLE' && (ignoreId ? node.id !== ignoreId : true);
-
-        let debounceTimer = null;
-
-        cssVarsObserver = new MutationObserver(function(mutations) {
-            let isUpdateMutation = false;
-
-            mutations.forEach(mutation => {
-                if (mutation.type === 'attributes') {
-                    isUpdateMutation = isLink(mutation.target) || isStyle(mutation.target);
-                }
-                else if (mutation.type === 'childList') {
-                    const addedNodes   = Array.apply(null, mutation.addedNodes);
-                    const removedNodes = Array.apply(null, mutation.removedNodes);
-
-                    isUpdateMutation = [].concat(addedNodes, removedNodes).some(node => {
-                        const isValidLink  = isLink(node) && !node.disabled;
-                        const isValidStyle = isStyle(node) && !node.disabled && regex.cssVars.test(node.textContent);
-
-                        return (isValidLink || isValidStyle);
-                    });
-                }
-
-                if (isUpdateMutation) {
-                    clearTimeout(debounceTimer);
-
-                    debounceTimer = setTimeout(function() {
-                        cssVars(settings);
-                    }, 1);
-                }
-            });
-        });
-
-        cssVarsObserver.observe(document.documentElement, {
-            attributes     : true,
-            attributeFilter: ['disabled', 'href'],
-            childList      : true,
-            subtree        : true
-        });
-
-        cssVarsObserver._disconnect = cssVarsObserver.disconnect;
-        cssVarsObserver.disconnect = function () {
-            this._disconnect();
-            cssVarsObserver = undefined;
-        };
-
+    if (!window.MutationObserver) {
+        return;
     }
+
+    const isLink  = node => node.tagName === 'LINK' && (node.getAttribute('rel') || '').indexOf('stylesheet') !== -1;
+    const isStyle = node => node.tagName === 'STYLE' && (ignoreId ? node.id !== ignoreId : true);
+
+    let debounceTimer = null;
+
+    if (cssVarsObserver) {
+        cssVarsObserver.disconnect();
+    }
+
+    settings.watch = defaults.watch;
+
+    cssVarsObserver = new MutationObserver(function(mutations) {
+        let isUpdateMutation = false;
+
+        mutations.forEach(mutation => {
+            if (mutation.type === 'attributes') {
+                isUpdateMutation = isLink(mutation.target) || isStyle(mutation.target);
+            }
+            else if (mutation.type === 'childList') {
+                const addedNodes   = Array.apply(null, mutation.addedNodes);
+                const removedNodes = Array.apply(null, mutation.removedNodes);
+
+                isUpdateMutation = [].concat(addedNodes, removedNodes).some(node => {
+                    const isValidLink  = isLink(node) && !node.disabled;
+                    const isValidStyle = isStyle(node) && !node.disabled && regex.cssVars.test(node.textContent);
+
+                    return (isValidLink || isValidStyle);
+                });
+            }
+
+            if (isUpdateMutation) {
+                clearTimeout(debounceTimer);
+
+                debounceTimer = setTimeout(function() {
+                    cssVars(settings);
+                }, 1);
+            }
+        });
+    });
+
+    cssVarsObserver.observe(document.documentElement, {
+        attributes     : true,
+        attributeFilter: ['disabled', 'href'],
+        childList      : true,
+        subtree        : true
+    });
 }
 
 /**
- * Fixes issue keyframe properties set using CSS custom property not being
+ * Fixes issue with keyframe properties set using CSS custom property not being
  * applied properly in some legacy (IE) and modern (Safari) browsers.
+ *
+ * @param {object} rootElement
  */
 function fixKeyframes(rootElement) {
     const animationNameProp = [
@@ -501,9 +509,9 @@ function fixKeyframes(rootElement) {
 /**
  * Returns fully qualified URL from relative URL and (optional) base URL
  *
- * @param {any} url
- * @param {any} [base=location.href]
- * @returns
+ * @param   {string} url
+ * @param   {string} [base=location.href]
+ * @returns {string}
  */
 function getFullUrl(url, base = location.href) {
     const d = document.implementation.createHTMLDocument('');

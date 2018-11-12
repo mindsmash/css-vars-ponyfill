@@ -614,8 +614,20 @@ describe('css-vars', function() {
 
         if ('MutationObserver' in window) {
             describe('watch', function() {
-                it('true', function(done) {
-                    const styleCss  = ':root{--color:red;}body{color:var(--color);}';
+                it('true - create MutationObserver', function(done) {
+                    const styleCss  = [
+                        ':root{--color:red;}body{color:var(--color);}',
+                        ':root{--color:green;}'
+                    ];
+
+                    createElmsWrap({ tag: 'style', text: styleCss[0] });
+
+                    cssVars({
+                        include   : '[data-test]',
+                        onlyLegacy: false
+                    });
+
+                    expect(getComputedStyle(document.body).color).to.be.colored('red');
 
                     cssVars({
                         include   : '[data-test]',
@@ -623,11 +635,46 @@ describe('css-vars', function() {
                         watch     : true
                     });
 
-                    createElmsWrap({ tag: 'style', text: styleCss });
+                    createElmsWrap({ tag: 'style', text: styleCss[1] });
+
+                    setTimeout(function() {
+                        expect(getComputedStyle(document.body).color).to.be.colored('green');
+                        done();
+                    }, 100);
+                });
+
+                it('false - disconnect MutationObserver', function(done) {
+                    const styleCss  = [
+                        ':root{--color:red;}body{color:var(--color);}',
+                        ':root{--color:green;}'
+                    ];
+
+                    expect(getComputedStyle(document.body).color).to.not.be.colored('red');
+
+                    cssVars({
+                        include   : '[data-test]',
+                        onlyLegacy: false,
+                        watch     : true
+                    });
+
+                    createElmsWrap({ tag: 'style', text: styleCss[0] });
 
                     setTimeout(function() {
                         expect(getComputedStyle(document.body).color).to.be.colored('red');
-                        done();
+
+                        cssVars({
+                            include   : '[data-test]',
+                            onlyLegacy: false,
+                            watch     : false
+                        });
+
+                        createElmsWrap({ tag: 'style', text: styleCss[1] });
+
+                        setTimeout(function() {
+                            expect(getComputedStyle(document.body).color).to.be.colored('red');
+
+                            done();
+                        }, 100);
                     }, 100);
                 });
             });
@@ -761,6 +808,31 @@ describe('css-vars', function() {
                     expect(onErrorNodes, 'onError nodes').to.include.members(styleElms);
                     expect(onErrorXHR.status, 'onError XHR').to.equal(404);
                     expect(onErrorURL, 'onError URL').to.include('fail.css');
+                    done();
+                }
+            });
+        });
+
+        it('triggers onError callback on invalid <link> CSS', function(done) {
+            const linkUrl  = '/base/tests/fixtures/404.html';
+            const styleElm = createElmsWrap({ tag: 'link', attr: { rel: 'stylesheet', href: linkUrl } })[0];
+
+            let onErrorCount = 0;
+
+            cssVars({
+                include   : '[data-test]',
+                onlyLegacy: false,
+                silent    : true, // remove to display console error messages
+                onError(errorMsg, node, xhr, url) {
+                    onErrorCount++;
+
+                    expect(errorMsg.toLowerCase().indexOf('error') > -1, 'onError message').to.be.true;
+                    expect(node, 'onError nodes').to.equal(styleElm);
+                    expect(xhr.status, 'onError XHR').to.equal(200);
+                    expect(url, 'onError URL').to.include(linkUrl);
+                },
+                onComplete(cssText, styleNode, cssVariables) {
+                    expect(onErrorCount, 'onError count').to.equal(1);
                     done();
                 }
             });

@@ -1,7 +1,7 @@
 /*!
- * @coyo/css-vars-ponyfill
- * v1.12.2
- * https://github.com/mindsmash/css-vars-ponyfill
+ * css-vars-ponyfill
+ * v1.14.0
+ * https://github.com/jhildenbiddle/css-vars-ponyfill
  * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
  * MIT license
  */
@@ -26,7 +26,7 @@
     }
     /*!
    * get-css-data
-   * v1.4.0
+   * v1.5.0
    * https://github.com/jhildenbiddle/get-css-data
    * (c) 2018 John Hildenbiddle <http://hildenbiddle.com>
    * MIT license
@@ -43,6 +43,11 @@
         var urlQueue = Array.apply(null, Array(urlArray.length)).map(function(x) {
             return null;
         });
+        function isValidCss() {
+            var cssText = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : "";
+            var isHTML = cssText.trim().charAt(0) === "<";
+            return !isHTML;
+        }
         function onError(xhr, urlIndex) {
             settings.onError(xhr, urlArray[urlIndex], urlIndex);
         }
@@ -68,7 +73,11 @@
                     xdr.onprogress = Function.prototype;
                     xdr.ontimeout = Function.prototype;
                     xdr.onload = function() {
-                        onSuccess(xdr.responseText, i);
+                        if (isValidCss(xdr.responseText)) {
+                            onSuccess(xdr.responseText, i);
+                        } else {
+                            onError(xdr, i);
+                        }
                     };
                     xdr.onerror = function(err) {
                         onError(xdr, i);
@@ -89,7 +98,7 @@
                 settings.onBeforeSend(xhr, url, i);
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState === 4) {
-                        if (xhr.status === 200) {
+                        if (xhr.status === 200 && isValidCss(xhr.responseText)) {
                             onSuccess(xhr.responseText, i);
                         } else {
                             onError(xhr, i);
@@ -820,7 +829,7 @@
                 if (!value || value.indexOf(VAR_FUNC_IDENTIFIER + "(") === -1) {
                     continue;
                 }
-                resolvedValue = fixHslCalc(resolveValue(value, map, settings));
+                resolvedValue = resolveValue(value, map, settings);
                 if (resolvedValue !== decl.value) {
                     if (!settings.preserve) {
                         decl.value = resolvedValue;
@@ -891,43 +900,6 @@
             }
         });
     }
-    function fixHslCalc(value) {
-        var reHslExp = /hsla?\(/;
-        var reCalcExp = /(-[a-z]+-)?calc\(/;
-        var oldValue = value;
-        var newValue = "";
-        while (reHslExp.test(oldValue)) {
-            var rootCalc = balancedMatch("(", ")", oldValue || "");
-            oldValue = oldValue.slice(rootCalc.end);
-            while (reCalcExp.test(rootCalc.body)) {
-                var nestedCalc = balancedMatch(reCalcExp, ")", rootCalc.body);
-                rootCalc.body = "".concat(nestedCalc.pre) + resolveExpression(nestedCalc.body) + nestedCalc.post;
-            }
-            newValue += rootCalc.pre + "(" + rootCalc.body;
-            newValue += !reHslExp.test(oldValue) ? ")" + rootCalc.post : "";
-        }
-        return newValue || value;
-    }
-    function resolveExpression(expr) {
-        var regex = /^\s*(\d+(?:\.\d+)?)%\s*$/;
-        var parts = expr.split(/(\+|-)/);
-        var sum = (parts[0] || "").match(regex);
-        if (!sum) {
-            return expr;
-        }
-        sum = parseFloat(sum[1]);
-        for (var i = 1; i < parts.length - 1; i += 2) {
-            var num = parts[i + 1].match(regex);
-            if (num && parts[i] === "+") {
-                sum += parseFloat(num[1]);
-            } else if (num && parts[i] === "-") {
-                sum -= parseFloat(num[1]);
-            } else {
-                return expr;
-            }
-        }
-        return sum + "%";
-    }
     function resolveValue(value, map) {
         var settings = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
         var __recursiveFallback = arguments.length > 3 ? arguments[3] : undefined;
@@ -960,6 +932,7 @@
             return varFuncData.pre + resolveFunc(varFuncData.body) + resolveValue(varFuncData.post, map, settings);
         }
     }
+    var name = "css-vars-ponyfill";
     var isBrowser = typeof window !== "undefined";
     var isNativeSupport = isBrowser && window.CSS && window.CSS.supports && window.CSS.supports("(--a: 0)");
     var defaults = {
@@ -975,7 +948,7 @@
         updateDOM: true,
         updateURLs: true,
         variables: {},
-        watch: false,
+        watch: null,
         onBeforeSend: function onBeforeSend() {},
         onSuccess: function onSuccess() {},
         onWarning: function onWarning() {},
@@ -1093,7 +1066,7 @@
    */    function cssVars() {
         var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
         var settings = mergeDeep(defaults, options);
-        var styleNodeId = "css-vars-ponyfill";
+        var styleNodeId = name;
         settings.exclude = "#".concat(styleNodeId) + (settings.exclude ? ",".concat(settings.exclude) : "");
         function handleError(message, sourceNode, xhr, url) {
             if (!settings.silent) {
@@ -1141,6 +1114,8 @@
             } else {
                 if (settings.watch) {
                     addMutationObserver(settings, styleNodeId);
+                } else if (settings.watch === false && cssVarsObserver) {
+                    cssVarsObserver.disconnect();
                 }
                 getCssData({
                     rootElement: settings.rootElement,
@@ -1227,7 +1202,7 @@
                                 }
                             }
                         }
-                        settings.onComplete(cssText, styleNode, JSON.parse(JSON.stringify(settings.updateDOM ? variableStore.dom : variableStore.temp)), cssVarsObserver);
+                        settings.onComplete(cssText, styleNode, JSON.parse(JSON.stringify(settings.updateDOM ? variableStore.dom : variableStore.temp)));
                     }
                 });
             }
@@ -1239,48 +1214,48 @@
         }
     }
     function addMutationObserver(settings, ignoreId) {
-        if (window.MutationObserver && !cssVarsObserver) {
-            var isLink = function isLink(node) {
-                return node.tagName === "LINK" && (node.getAttribute("rel") || "").indexOf("stylesheet") !== -1;
-            };
-            var isStyle = function isStyle(node) {
-                return node.tagName === "STYLE" && (ignoreId ? node.id !== ignoreId : true);
-            };
-            var debounceTimer = null;
-            cssVarsObserver = new MutationObserver(function(mutations) {
-                var isUpdateMutation = false;
-                mutations.forEach(function(mutation) {
-                    if (mutation.type === "attributes") {
-                        isUpdateMutation = isLink(mutation.target) || isStyle(mutation.target);
-                    } else if (mutation.type === "childList") {
-                        var addedNodes = Array.apply(null, mutation.addedNodes);
-                        var removedNodes = Array.apply(null, mutation.removedNodes);
-                        isUpdateMutation = [].concat(addedNodes, removedNodes).some(function(node) {
-                            var isValidLink = isLink(node) && !node.disabled;
-                            var isValidStyle = isStyle(node) && !node.disabled && regex.cssVars.test(node.textContent);
-                            return isValidLink || isValidStyle;
-                        });
-                    }
-                    if (isUpdateMutation) {
-                        clearTimeout(debounceTimer);
-                        debounceTimer = setTimeout(function() {
-                            cssVars(settings);
-                        }, 1);
-                    }
-                });
-            });
-            cssVarsObserver.observe(document.documentElement, {
-                attributes: true,
-                attributeFilter: [ "disabled", "href" ],
-                childList: true,
-                subtree: true
-            });
-            cssVarsObserver._disconnect = cssVarsObserver.disconnect;
-            cssVarsObserver.disconnect = function() {
-                this._disconnect();
-                cssVarsObserver = undefined;
-            };
+        if (!window.MutationObserver) {
+            return;
         }
+        var isLink = function isLink(node) {
+            return node.tagName === "LINK" && (node.getAttribute("rel") || "").indexOf("stylesheet") !== -1;
+        };
+        var isStyle = function isStyle(node) {
+            return node.tagName === "STYLE" && (ignoreId ? node.id !== ignoreId : true);
+        };
+        var debounceTimer = null;
+        if (cssVarsObserver) {
+            cssVarsObserver.disconnect();
+        }
+        settings.watch = defaults.watch;
+        cssVarsObserver = new MutationObserver(function(mutations) {
+            var isUpdateMutation = false;
+            mutations.forEach(function(mutation) {
+                if (mutation.type === "attributes") {
+                    isUpdateMutation = isLink(mutation.target) || isStyle(mutation.target);
+                } else if (mutation.type === "childList") {
+                    var addedNodes = Array.apply(null, mutation.addedNodes);
+                    var removedNodes = Array.apply(null, mutation.removedNodes);
+                    isUpdateMutation = [].concat(addedNodes, removedNodes).some(function(node) {
+                        var isValidLink = isLink(node) && !node.disabled;
+                        var isValidStyle = isStyle(node) && !node.disabled && regex.cssVars.test(node.textContent);
+                        return isValidLink || isValidStyle;
+                    });
+                }
+                if (isUpdateMutation) {
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(function() {
+                        cssVars(settings);
+                    }, 1);
+                }
+            });
+        });
+        cssVarsObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: [ "disabled", "href" ],
+            childList: true,
+            subtree: true
+        });
     }
     function fixKeyframes(rootElement) {
         var animationNameProp = [ "animation-name", "-moz-animation-name", "-webkit-animation-name" ].filter(function(prop) {
