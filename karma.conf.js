@@ -7,183 +7,226 @@ const saucelabs = require('./saucelabs.config');
 // Variables
 // =============================================================================
 const files = {
-    serve: './tests/fixtures/**/*.*',
-    test : './tests/**/*.test.js'
+    fixtures: './tests/fixtures/**/*',
+    test    : './tests/**/*.test.js'
 };
 
 
-// Local config
+// Settings
 // =============================================================================
-const localConfig = {
-    // Add browsers via Karma launchers
-    // https://www.npmjs.com/search?q=karma+launcher
-    browsers: [
-        'ChromeHeadless'
-    ],
-    files: [
-        'node_modules/@babel/polyfill/dist/polyfill.js',
-        'node_modules/@webcomponents/webcomponentsjs/webcomponents-bundle.js',
-        files.test,
-        // Serve files for accessing in tests via AJAX
-        // Ex: /base/[files.serve]/path/to/file
-        { pattern: files.serve, included: false, served: true, watched: true }
-    ],
-    preprocessors: {
-        [files.test]: ['eslint', 'webpack', 'sourcemap']
-    },
-    frameworks: ['mocha', 'chai'],
-    reporters : ['mocha', 'coverage'],
-    webpack   : {
-        mode   : 'development',
-        devtool: 'inline-source-map',
-        module : {
-            rules: [{
-                test   : /\.js$/,
-                exclude: [/node_modules/],
-                use    : [{
-                    loader : 'babel-loader',
-                    options: {
-                        presets: [
-                            ['@babel/env', {
-                                targets: {
-                                    browsers: ['ie >= 9']
-                                }
-                            }]
-                        ],
-                        plugins: [
-                            'transform-custom-element-classes',
-                            ['istanbul', {
-                                exclude: [
-                                    '**/*.test.js',
-                                    'tests/helpers/*'
-                                ]
-                            }]
+const settings = {
+    base: {
+        files: [
+            'node_modules/@babel/polyfill/dist/polyfill.js',
+            files.test,
+            // Served only (Access in tests by prepending /base/ to path)
+            { pattern: files.fixtures, included: false, served: true, watched: true }
+        ],
+        preprocessors: {
+            [files.fixtures]: ['file-fixtures'],
+            [files.test]    : ['eslint', 'webpack', 'sourcemap']
+        },
+        frameworks: ['mocha', 'chai'],
+        reporters : ['mocha'],
+        fileFixtures: {
+            stripPrefix: 'tests/fixtures/'
+        },
+        webpack   : {
+            mode   : 'development',
+            module : {
+                rules: [
+                    {
+                        test   : /\.js$/,
+                        exclude: [/node_modules/],
+                        use    : [
+                            {
+                                loader : 'babel-loader',
+                                options: {
+                                    presets: [
+                                        [
+                                            '@babel/env',
+                                            {
+                                                targets: {
+                                                    browsers: ['ie >= 9']
+                                                }
+                                            }
+                                        ]
+                                    ],
+                                    plugins: [
+                                        'transform-custom-element-classes'
+                                    ]
+                                },
+                            }
                         ]
-                    },
-                }]
-            }]
+                    }
+                ]
+            }
+        },
+        webpackMiddleware: {
+            // https://webpack.js.org/configuration/stats/
+            stats: 'minimal'
+        },
+        mochaReporter: {
+            // https://www.npmjs.com/package/karma-mocha-reporter
+            output: 'autowatch'
+        },
+        autoWatch                 : false,
+        browserDisconnectTimeout  : 1000*2,  // default 2000
+        browserDisconnectTolerance: 1,       // default 0
+        browserNoActivityTimeout  : 1000*10, // default 10000
+        captureTimeout            : 1000*60, // default 60000
+        colors                    : true,
+        concurrency               : Infinity,
+        port                      : 9876,
+        singleRun                 : true
+    },
+    coverage: {
+        get reporters() {
+            return [].concat(settings.base.reporters, 'coverage');
+        },
+        get webpack() {
+            const webpackConfig = Object.assign({}, settings.base.webpack);
+            const babelPluginsConfig = webpackConfig.module.rules[0].use[0].options.plugins;
+
+            babelPluginsConfig.push(['istanbul', { exclude: 'tests/*' }]);
+
+            return webpackConfig;
+        },
+        // Code coverage
+        // https://www.npmjs.com/package/karma-coverage
+        coverageReporter: {
+            reporters: [
+                { type: 'html' },
+                { type: 'lcovonly' },
+                { type: 'text-summary' }
+            ]
         }
     },
-    webpackMiddleware: {
-        // https://webpack.js.org/configuration/stats/
-        stats: 'minimal'
+    local: {
+        get webpack() {
+            const webpackConfig = Object.assign({}, settings.base.webpack);
+
+            webpackConfig.devtool = 'inline-source-map';
+
+            return webpackConfig;
+        },
     },
-    // Code coverage
-    // https://www.npmjs.com/package/karma-coverage
-    coverageReporter: {
-        reporters: [
-            { type: 'html' },
-            { type: 'lcovonly' },
-            { type: 'text-summary' }
-        ]
-    },
-    // Mocha reporter
-    // https://www.npmjs.com/package/karma-mocha-reporter
-    mochaReporter: {
-        output: 'autowatch'
-    },
-    port       : 9876,
-    colors     : true,
-    autoWatch  : false,
-    singleRun  : true,
-    concurrency: Infinity
+    remote: {
+        // Use custom hostname to prevent Safari disconnects
+        // https://support.saucelabs.com/hc/en-us/articles/115010079868-Issues-with-Safari-and-Karma-Test-Runner
+        hostname: 'TRAVIS' in process.env ? 'travis.dev' : 'localhost',
+        get reporters() {
+            return [].concat(settings.base.reporters, 'saucelabs');
+        },
+        sauceLabs: {
+            username         : saucelabs.username || process.env.SAUCE_USERNAME,
+            accessKey        : saucelabs.accessKey || process.env.SAUCE_ACCESS_KEY,
+            testName         : `${pkg.name} (karma)`,
+            recordScreenshots: false,
+            recordVideo      : false
+        }
+    }
 };
 
 
-// Remote config
+// Functions
 // =============================================================================
-const remoteConfig = Object.assign({}, localConfig, {
-    // SauceLabs browers (see platform configurator below)
-    // https://wiki.saucelabs.com/display/DOCS/Platform+Configurator#/
-    customLaunchers: {
-        sl_chrome: {
-            base       : 'SauceLabs',
-            browserName: 'Chrome',
-            platform   : 'Windows 10',
-            version    : '26.0'
-        },
-        sl_edge: {
-            base       : 'SauceLabs',
-            browserName: 'MicrosoftEdge',
-            platform   : 'Windows 10',
-            version    : '13.10586'
-        },
-        sl_firefox: {
-            base       : 'SauceLabs',
-            browserName: 'Firefox',
-            platform   : 'Windows 10',
-            version    : '30'
-        },
-        sl_ie_11: {
-            base       : 'SauceLabs',
-            browserName: 'Internet Explorer',
-            platform   : 'Windows 10',
-            version    : '11.0'
-        },
+function message(text, level = 'log') {
+    // Credit: Thomas Brierley
+    // https://stackoverflow.com/a/51506718/4903063
+    const wrap = (s, w = 60) => {
+        s = s.replace(new RegExp(`(?![^\\n]{1,${w}}$)([^\\n]{1,${w}})\\s`, 'g'), '$1\n');
+        s = s.replace(/\n\s/g, '\n');
 
-        // IE < 11 test disabled due to web component incompatibility
-        // ----------------------------------------------------------
-        // sl_ie_10: {
-        //     base       : 'SauceLabs',
-        //     browserName: 'Internet Explorer',
-        //     platform   : 'Windows 8',
-        //     version    : '10.0'
-        // },
-        // sl_ie_9: {
-        //     base       : 'SauceLabs',
-        //     browserName: 'Internet Explorer',
-        //     platform   : 'Windows 7',
-        //     version    : '9.0'
-        // },
+        return s;
+    };
 
-        sl_safari: {
-            base       : 'SauceLabs',
-            browserName: 'Safari',
-            platform   : 'OS X 10.10',
-            version    : '8.0'
-        }
-    },
-    // Set browsers to customLaunchers
-    get browsers() {
-        return Object.keys(this.customLaunchers);
-    },
-    // SauceLab settings
-    sauceLabs: {
-        username : saucelabs.username || process.env.SAUCE_USERNAME,
-        accessKey: saucelabs.accessKey || process.env.SAUCE_ACCESS_KEY,
-        testName : `${pkg.name} (karma)`
-    }
-});
+    // eslint-disable-next-line
+    console[level]([
+        '============================================================\n',
+        `${wrap(text)}\n`,
+        '============================================================\n'
+    ].join(''));
+}
 
 
 // Export
 // =============================================================================
 module.exports = function(config) {
-    const isRemote   = Boolean(process.argv.indexOf('--remote') > -1);
-    const testConfig = isRemote ? remoteConfig : localConfig;
+    const isRemoteCoverage = Boolean(process.argv.indexOf('--remotecoverage') > -1);
+    const isRemoteTest = Boolean(process.argv.indexOf('--remotetest') > -1);
+    const testConfig = Object.assign({}, settings.base);
 
-    if (isRemote) {
-        // Disabled source maps to prevent SauceLabs timeouts
-        // https://github.com/karma-runner/karma-sauce-launcher/issues/95
-        testConfig.webpack.devtool = '';
-        testConfig.webpack.module.rules[0].use[0].options.sourceMap = false;
+    // Remote test
+    if (isRemoteTest) {
+        message('KARMA: Browser Tests');
 
-        // Add SauceLabs reporter
-        testConfig.reporters.push('saucelabs');
-
-        // Remove text-summary reporter
-        testConfig.coverageReporter.reporters = testConfig.coverageReporter.reporters.filter(obj => obj.type !== 'text-summary');
+        Object.assign(testConfig, settings.remote, {
+            // SauceLabs browers
+            // https://wiki.saucelabs.com/display/DOCS/Platform+Configurator#/
+            customLaunchers: {
+                sl_chrome: {
+                    base       : 'SauceLabs',
+                    browserName: 'Chrome',
+                    platform   : 'Windows 10',
+                    version    : '48.0'
+                },
+                sl_edge: {
+                    base       : 'SauceLabs',
+                    browserName: 'MicrosoftEdge',
+                    platform   : 'Windows 10',
+                    version    : '14.14393'
+                },
+                sl_firefox: {
+                    base       : 'SauceLabs',
+                    browserName: 'Firefox',
+                    platform   : 'Windows 10',
+                    version    : '30'
+                },
+                sl_ie_9: {
+                    base       : 'SauceLabs',
+                    browserName: 'Internet Explorer',
+                    platform   : 'Windows 7',
+                    version    : '9.0'
+                },
+                sl_safari: {
+                    base       : 'SauceLabs',
+                    browserName: 'Safari',
+                    platform   : 'OS X 10.10',
+                    version    : '8.0'
+                }
+            },
+            get browsers() {
+                return Object.keys(this.customLaunchers);
+            }
+        });
     }
+    // Remote coverage
+    else if (isRemoteCoverage) {
+        message('KARMA: Code Coverage');
+
+        Object.assign(testConfig, settings.remote, settings.coverage, {
+            browsers       : ['ChromeTravis'],
+            customLaunchers: {
+                ChromeTravis: {
+                    base : 'Chrome',
+                    flags: [
+                        '--no-sandbox'
+                    ]
+                }
+            }
+        });
+    }
+    // Local
     else {
-        // eslint-disable-next-line
-        console.log([
-            '============================================================\n',
-            `KARMA: localhost:${testConfig.port}/debug.html\n`,
-            '============================================================\n'
-        ].join(''));
+        message(`KARMA: localhost:${testConfig.port}/debug.html`);
+
+        Object.assign(testConfig, settings.local, settings.coverage, {
+            browsers: ['ChromeHeadless']
+        });
     }
 
     // Logging: LOG_DISABLE, LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
-    testConfig.logLevel = config.LOG_WARN;
+    testConfig.logLevel = config.LOG_INFO;
     config.set(testConfig);
 };

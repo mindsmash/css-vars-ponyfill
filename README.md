@@ -1,7 +1,7 @@
 # css-vars-ponyfill
 
 [![NPM](https://img.shields.io/npm/v/css-vars-ponyfill.svg?style=flat-square)](https://www.npmjs.com/package/css-vars-ponyfill)
-[![Build Status](https://img.shields.io/travis/jhildenbiddle/css-vars-ponyfill.svg?style=flat-square)](https://travis-ci.org/jhildenbiddle/css-vars-ponyfill)
+[![Build Status](https://img.shields.io/travis/jhildenbiddle/css-vars-ponyfill/master.svg?style=flat-square)](https://travis-ci.org/jhildenbiddle/css-vars-ponyfill)
 [![Codacy](https://img.shields.io/codacy/grade/5d967da1e518489aac42d99b87088671.svg?style=flat-square)](https://www.codacy.com/app/jhildenbiddle/css-vars-ponyfill?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jhildenbiddle/css-vars-ponyfill&amp;utm_campaign=Badge_Grade)
 [![Codecov](https://img.shields.io/codecov/c/github/jhildenbiddle/css-vars-ponyfill.svg?style=flat-square)](https://codecov.io/gh/jhildenbiddle/css-vars-ponyfill)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/jhildenbiddle/css-vars-ponyfill/blob/master/LICENSE)
@@ -63,17 +63,11 @@ Git:
 git clone https://github.com/jhildenbiddle/css-vars-ponyfill.git
 ```
 
-CDN ([unpkg.com](https://unpkg.com/) shown, also on [jsdelivr.net](https://www.jsdelivr.com/)):
+CDN ([jsdelivr.com](https://www.jsdelivr.com/) shown, also on [unpkg.com](https://unpkg.com/)):
 
 ```html
-<!-- file.html (latest v1.x.x) -->
-
-<script src="https://unpkg.com/css-vars-ponyfill@1"></script>
-<script>
-  cssVars({
-    // ...
-  });
-</script>
+<!-- Latest v1.x.x -->
+<script src="https://cdn.jsdelivr.net/npm/css-vars-ponyfill@1"></script>
 ```
 
 ## Examples
@@ -381,6 +375,16 @@ When `true`, the ponyfill will only transform custom properties, generate CSS, a
 ```javascript
 cssVars({
   onlyLegacy: true // default
+});
+
+cssVars({
+  // Treat all browsers as legacy
+  onlyLegacy: false
+});
+
+cssVars({
+  // Treat Edge 15/16 as legacy
+  onlyLegacy: !(/Edge\/1[56]\./i.test(navigator.userAgent))
 });
 ```
 
@@ -725,7 +729,7 @@ cssVars({
   1. **node**: The source node `object` reference
   1. **url**: The source URL `string` (`<link>` href, `@import` url, or page url for `<style>` data)
 
-Callback after CSS data has been collected from each node and *before* CSS custom properties have been transformed. Allows modifying the CSS data before it is transformed by returning any `string` value (or `false` to skip).
+Callback after CSS data has been collected from each node. Allows modifying the CSS data before it is added to the final output by returning any `string` value or skipping the CSS data by returning `false`, `null`, or an empty string (`""`).
 
 **Note:** The order in which `<link>` and `@import` CSS data is "successfully" collected (thereby triggering this callback) is not guaranteed as these requests are asynchronous.
 

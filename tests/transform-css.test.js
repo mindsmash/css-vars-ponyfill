@@ -1,6 +1,5 @@
 // Dependencies
 // =============================================================================
-import loadFixtures       from './helpers/load-fixtures';
 import resetVariableStore from './helpers/reset-variablestore';
 import transformCss       from '../src/transform-css';
 import { expect }         from 'chai';
@@ -9,20 +8,8 @@ import { expect }         from 'chai';
 // Suite
 // =============================================================================
 describe('transform-css', function() {
-    const fixtures = {};
-
     // Hooks
     // -------------------------------------------------------------------------
-    before(async function() {
-        await loadFixtures({
-            base: '/base/tests/fixtures/',
-            urls : [
-                'test-parse.css',
-                'test-stringify.css'
-            ]
-        }, fixtures);
-    });
-
     beforeEach(function() {
         resetVariableStore();
     });
@@ -67,7 +54,7 @@ describe('transform-css', function() {
                 }
                 /* 21 */
             `;
-            const cssOut    = transformCss(cssIn);
+            const cssOut    = transformCss(cssIn, { onlyVars: true });
             const expectCss = 'p{color:red;}';
 
             expect(cssOut).to.equal(expectCss);
@@ -122,6 +109,17 @@ describe('transform-css', function() {
             const cssIn     = 'p { color: var(--fail, red); }';
             const cssOut    = transformCss(cssIn);
             const expectCss = 'p{color:red;}';
+
+            expect(cssOut).to.equal(expectCss);
+        });
+
+        it('transforms variable function with color function fallback', function() {
+            const cssIn     = `
+                :root { --color: rgba(0, 0, 0, 0.5); }
+                p { color: var(--color, rgba(255, 255, 255, 0.5)); }
+            `;
+            const cssOut    = transformCss(cssIn);
+            const expectCss = 'p{color:rgba(0, 0, 0, 0.5);}';
 
             expect(cssOut).to.equal(expectCss);
         });

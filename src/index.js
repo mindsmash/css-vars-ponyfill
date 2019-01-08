@@ -19,7 +19,7 @@ const defaults = {
     // Options
     fixNestedCalc: true,  // transformCss
     onlyLegacy   : true,  // cssVars
-    onlyVars     : false, // cssVars, transformCss
+    onlyVars     : false, // cssVars, parseCSS
     preserve     : false, // transformCss
     shadowDOM    : false, // cssVars
     silent       : false, // cssVars
@@ -264,7 +264,7 @@ function cssVars(options = {}) {
                 onSuccess(cssText, node, url) {
                     const returnVal = settings.onSuccess(cssText, node, url);
 
-                    cssText = returnVal === false ? '' : returnVal || cssText;
+                    cssText = returnVal !== undefined && Boolean(returnVal) === false ? '' : returnVal || cssText;
 
                     // Convert relative url(...) values to absolute
                     if (settings.updateURLs) {

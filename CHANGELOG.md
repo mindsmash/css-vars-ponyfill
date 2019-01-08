@@ -1,5 +1,54 @@
 # Change Log
 
+## 1.16.2
+
+*2018-12-23*
+
+- Updated preferred CDN link to jsdelivr.
+
+## 1.16.1
+
+*2018-12-17*
+
+- Fixed removal of unrecognized at-rule when `options.onlyVars` is set to `true`.
+
+## 1.16.0
+
+*2018-12-14*
+
+- Added `types` property to package.json.
+- Updated `options.onlyVars` implementation resulting in a significant
+  performance increase.
+- Fixed build status badge (now reflects only master branch status).
+
+## 1.15.3
+
+*2018-11-28*
+
+- Fixed bug that incorrectly transformed variable functions that resolve to
+  values containing parenthesis with fallback values that also contain
+  parenthesis (#42).
+
+## 1.15.2
+
+*2018-11-24*
+
+- Updated README with `options.onlyLegacy` examples.
+
+## 1.15.1
+
+*2018-11-14*
+
+- Fixed bug that prevented IE10 from fetching `<link>` CSS data from external
+  domains.
+
+## 1.15.0
+
+*2018-11-12*
+
+- Updated `options.onSuccess` callback to better handle falsey return values
+  (e.g. `false`, `null`, `0`, `""`).
+
 ## 1.14.0
 
 *2018-11-11*
